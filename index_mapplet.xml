@@ -1,0 +1,419 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module>
+  <ModulePrefs title="MyBikeRoutes" 
+             description="MyBikeRoutes"
+             author="Coders"
+             author_email="your-email@google.com"
+             height="150">
+
+    <Require feature="sharedmap"/>
+  </ModulePrefs>
+  <Content type="html">
+  <![CDATA[
+    <script type="text/javascript">
+        //Prevoiusly selected point
+        var oldPoint = null;
+        var allPoints = [];
+        var allPointsArray = [];
+        var wayPoints = [];
+        var wayPointsArray = [];
+        var directions = [];
+        var dirIdx = 0;
+        var polylines = [];
+        var markers = [];
+        var FREE = "free";
+        var SNAP = "snap";
+        var curDrawStyle = FREE;
+    
+        //Get map object
+        var map = new GMap2({draggableCursor:"crosshair"});
+        //Get a point on map
+        var point = new GLatLng(43.659868, -79.396708);
+        //Set map centre with zoom 13
+        map.setCenter(point, 13);
+
+        //Get marker at point
+//        var marker = new GMarker(point);
+//        markers.push(marker);
+        //Add the overlay
+//        map.addOverlay(marker);
+        //Show infoWindow with location info
+//        marker.openInfoWindowHtml("<B>35 St. George Street, Toronto, ON</B><BR>Great Minds for a Great Future");
+
+        directions[dirIdx] = new GDirections(map);
+
+        ProcessAjaxStore(0, null,null);
+        //Scroll to the bottom of the txtText area
+        ScrollBottom();
+
+        //Add Event Listener for buttonClick
+        GEvent.addListener(map, "click", 
+          function(marker, point)
+          {
+             //If clicked on marker then remove marker
+             //elase add marker and draw polyline between
+             //old and point (current)
+             if (marker) 
+             {
+                map.removeOverlay(marker);
+             }
+             else
+             {
+                //If oldPoint exists draw line between oldPoint and point (current)
+                if(oldPoint !=null)
+                {
+                   if(curDrawStyle == FREE)
+                   {
+                      drawLine(oldPoint, point);
+                      allPoints.push(point);
+                   }
+                   else
+                   {
+                       wayPoints.push(aToGStr(point));
+                       var curDir = directions[dirIdx];
+                       handleListn3 = GEvent.addListener(directions[dirIdx], "load", 
+                          function()
+                          {
+                             var color = "RED";
+                             var polyline = curDir.getPolylineAsync(OnDirLoad);
+                          }
+                       );
+
+                       handleListn2 = GEvent.addListener(directions[dirIdx],"error", 
+                          function(direction)
+                          {
+                              document.getElementById("txtDummy").value = "error loadwaypoints";
+                              directions[dirIdx].getStatusAsync(
+                                function(a)
+                                {
+                                }
+                              );
+                           }
+                        );
+//                       directions[dirIdx].loadFromWaypoints(wayPoints, {"getPolyline": false, "preserveViewport": true});
+                   }
+                }
+                else
+                {
+                    if(curDrawStyle == FREE)
+                    {
+                        allPoints.push(point);
+                    }
+                    else
+                    {
+                        wayPoints.push(aToGStr(point));
+                    }
+                }
+
+                if(curDrawStyle == FREE || (oldPoint == null))
+                {
+/*
+                    marker = new GMarker(point);
+                    markers.push(marker);
+                    map.addOverlay(marker);
+*/
+                }
+
+                //point (current) is the oldPoint now
+                oldPoint = point;
+            }
+          }
+        );
+
+     function OnLoadDir(direction)
+     {
+         document.getElementById("txtDummy").value = "load wayPoints";
+     }
+
+    function OnDirLoad(direction,color)
+    {
+    }
+
+     function OnErrorDir(direction)
+     {
+         document.getElementById("txtDummy").value = "error loadwaypoints";
+         direction.getStatusAsync(function test(a)
+           {
+               alert("here");
+           }
+         );
+     }
+
+     //Drawline between point1 and point2
+     function drawLine(point1, point2)
+     {
+        var points = [];
+        points.push(point1);
+        points.push(point2);
+
+        var polyline = new GPolyline(points, "#ff0000", 5, 0.7)
+        polylines.push(polyline);
+        map.addOverlay(polyline);
+    }
+
+     function drawPolyLine(points)
+     {
+        var polyline = new GPolyline(points, "#ff0000", 5, 0.7)
+        polylines.push(polyline);
+        map.addOverlay(polyline);
+     }
+
+     //Drawline between point1 and point2
+     function drawDirection(wayPoints)
+     {
+         if(directions[dirIdx] == null)
+         {
+             directions[dirIdx] = new GDirections(map);
+         }
+//         directions[dirIdx].loadFromWaypoints(wayPoints, {"getPolyline": false, "preserveViewport": true});
+         dirIdx++;
+         directions[dirIdx] = new GDirections(map);
+//        map.addOverlay(polyline);
+    }
+
+
+    function btnAjaxStoreClick()
+    {
+       allPointsArray.push(allPoints);
+       for(var i =0; i<allPointsArray.length; i++)
+       {
+           ProcessAjaxStore(2,allPointsArray[i],FREE);
+       }
+
+       wayPointsArray.push(wayPoints);
+       for(var i =0; i<wayPointsArray.length; i++)
+       {
+           ProcessAjaxStore(2,wayPointsArray[i],SNAP);
+       }
+       wayPointsArray = [];
+       wayPoints = [];
+
+       allPointsArray = [];
+       allPoints = [];
+       oldPoint = null;
+    }
+
+    function btnAjaxClearClick()
+    {
+       ProcessAjaxStore(3, null,null);
+    }
+
+    function GetXmlHttpObject() 
+    {
+       var xmlHttp;
+       try 
+       {
+          // Firefox, Opera 8.0+, Safari
+          xmlHttp=new XMLHttpRequest();
+       }
+       catch (e) 
+       {
+          // Internet Explorer
+          try 
+          {
+             xmlHttp=new ActiveXObject("Msxml2.XMLHTTP");
+          }
+          catch (e)
+          {
+             try 
+             {
+                xmlHttp=new ActiveXObject("Microsoft.XMLHTTP");
+             }
+             catch (e)
+             {
+                alert("AJAX is not supported by the browser");
+                return false;
+             }
+          }
+       }
+       return xmlHttp;
+    }
+
+    function ProcessAjaxStore(readWrite, pointStore,drawStyle)
+    {
+         var address = "http://www.mybikeroutes.com/cgi-files/test.php";
+         //todo: Need to add weight and distance fields
+         var weight = 1;
+         var distance = 0;
+
+         var getPart = "hdnPoint=" + encodeURIComponent(pointStore) + "&readWrite=" + readWrite + "&drawStyle=" + drawStyle + "&weight=" + weight + "&dist="+ distance + "&ref=" + Math.random();
+         address  = address + "?" + getPart;
+
+       _IG_FetchContent(address, function(data)
+        {
+             // The request is complete
+             document.getElementById("txtText").value = data;
+
+             if(readWrite == 0)
+             {
+	         ReDrawLines(document.getElementById("txtText").value);
+             }
+             else if(readWrite == 3)
+             {
+                //document.getElementById('form1').submit();
+                for(var i =0; i < polylines.length; i++)
+                {
+                    if(polylines[i] != null)
+                    {
+                       map.removeOverlay(polylines[i]);
+                    }
+                }
+                polylines = [];
+
+                for(i =0; i < markers.length; i++)
+                {
+                    if(markers[i] != null)
+                    {
+                       map.removeOverlay(markers[i]);
+                    }
+                }
+                markers = [];
+
+                for(var i =0; i < directions.length; i++)
+                {
+                    if(directions[i] != null)
+                    {
+//                       map.removeOverlay(directions[i]);
+                         directions[i].clear();
+                    }
+                }
+                directions = [];
+                dirIdx = 0;
+                directions[dirIdx] = new GDirections(map);
+                allPoints = [];
+                wayPoints = [];
+
+                document.getElementById("txtText").value = "Points Cleared.\n";
+             }
+             ScrollBottom();
+       }, 
+       {refreshInterval: 0});         
+    }
+
+    //Scroll to the bottom of the txtText area
+    function ScrollBottom() 
+    {
+//       var obj=document.getElementById('txtText');
+//       obj.scrollTop=obj.scrollHeight;
+    }
+
+    function trim(stringToTrim)
+    {
+        return stringToTrim.replace(/^\s+|\s+$/g,"");
+    }
+    function ltrim(stringToTrim)
+    {
+        return stringToTrim.replace(/^\s+/,"");
+    }
+
+    function rtrim(stringToTrim)
+    {
+        return stringToTrim.replace(/\s+$/,"");
+    }
+    
+    function aToGPoint(point)
+    {
+       sPoint = point.toString();
+       var pointA = sPoint.split(",");
+       var pointR = new GLatLng(pointA[0].toString().substring(1,pointA[0].toString().length), pointA[1].toString().substring(0,pointA[1].toString().length-1));
+
+       return pointR;
+    }
+
+    function aToGStr(point)
+    {
+       var pointR = point.toString().substring(1,point.toString().length -1);
+
+       return pointR;
+    }
+
+
+    function drawAndMarkMultiplePolys(line)
+    {
+       var lineSplit = trim(line).split(";");
+       var drawStyle = lineSplit[1];
+       var latsLngs = lineSplit[0].split(",");
+
+       if(drawStyle == SNAP)
+       {
+           var dWayPoints = [];
+           for(var i=0; i< latsLngs.length; i= i+2)
+           {
+               var latLng = [];
+               latLng.push(latsLngs[i]);
+               latLng.push(latsLngs[i+1]);
+               var pt0 = aToGPoint(latLng.toString());
+               dWayPoints.push(aToGStr(pt0));
+           }
+           drawDirection(dWayPoints);
+       }
+       else
+       {
+           var points = [];
+           for(var i=0; i< latsLngs.length -1; i=i+2)
+           {
+               var latLng = [];
+               latLng.push(latsLngs[i]);
+               latLng.push(latsLngs[i+1]);
+
+               var pt0 = aToGPoint(latLng.toString());
+               points.push(pt0);
+/*          
+               var marker0 = new GMarker(pt0);
+               markers.push(marker0);
+               map.addOverlay(marker0);
+*/
+            }
+            drawPolyLine(points);
+         }
+    }
+
+    function ReDrawLines(reLines)
+    {
+       var multLines = reLines.split("\n");
+       for(var i=0; i< multLines.length; i++)
+       {
+          if((multLines[i] !="") && (multLines[i] != "undefined"))
+          {
+             drawAndMarkMultiplePolys(multLines[i]);
+          }
+       }
+    }
+
+    function drawStyleChange(style)
+    {
+        if(curDrawStyle != style && (oldPoint!=null))
+        {
+            if(curDrawStyle == FREE)
+            {
+               allPointsArray.push(allPoints);
+               allPoints = [];
+               wayPoints.push(aToGStr(oldPoint));
+            }
+            else
+            {
+                wayPointsArray.push(aToGStr(wayPoints));
+                wayPoints = [];
+                dirIdx++;
+                directions[dirIdx] = new GDirections(map);
+                allPoints.push(oldPoint);
+            }
+        }
+  
+        curDrawStyle = style;
+    }
+    </script>
+    <form id="form1">
+      <textarea name="txtText" id="txtText" cols=30 rows=10 readonly="true"></textarea><BR/>
+      <input type="button" id="btnAjaxStore"  name="btnAjaxStore" onClick="btnAjaxStoreClick()" value="Ajax: Store Last Point"></input>
+      <div id="divDrawStyle">
+        <input type="radio" name="drawStyle" value=FREE onClick=drawStyleChange(FREE) checked ID="Radio1">FreeDraw</input>
+        <input type="radio" name="drawStyle" value=SNAP onClick=drawStyleChange(SNAP) ID="Radio2">Snap To Road</input>
+      </div>
+      <input type="hidden" id="hdnPoint" name="hdnPoint"/>
+      <input type="text" id="txtDummy" name="txtDummy"/>
+
+    </form>
+    ]]>
+</Content>
+</Module>

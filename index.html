@@ -1,0 +1,4512 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8;" />
+        <meta http-equiv="Pragma" content="no-cache" />
+        <meta http-equiv="Expires" content="-1" />
+        <meta http-equiv="Cache-control" content="no-cache" />
+        <meta name="description" content="Draw and Share Bicycle Routes - Bike The World" />
+        <meta name="keywords" content="bicycle, bike, bike map, bicycle map, bike routes, bicycle routes, mybikeroutes, my bike routes, shortest path" />
+        <title>MyBikeRoutes.com</title>
+
+        <script src="http://maps.google.com/maps?file=api&amp;v=3&amp;key=ABQIAAAAUUeFs2rhayuuRaS99gaKnRR9KDB78flaB6eUPjI-gNxrbG4I9hSeONZG06fhvV493EBMiKOOq1PAXg"
+                type="text/javascript">
+        </script>
+
+        <script type="text/javascript">
+            window.onload = load;
+            window.onunload = GUnload;
+            window.onresize = resizeMap;
+
+            // Using too much Geodeocding is restricted
+            var geocoder = new GClientGeocoder();
+
+            //Prevoiusly selected point
+            var oldPoint = null;
+            var map;
+            var pageActivated = false;
+
+            var allPoints = new Array();
+            var allPointsArray = new Array();
+            var loadedAllPointsArray = new Array();
+
+            var wayPoints = new Array();
+            var wayPointsArray = new Array();
+            var loadedWayPointsArray = new Array();
+
+            var loadedWayCounter = 0;
+            var loadedWayColors = new Array();
+
+            var directions = new Array();
+            var curDirIdx = 0;
+            var loadedDirections = new Array();
+
+            var polylines = new Array();
+            var loadedPolylines = new Array();
+
+            var markers = new Array();
+            var loadedMarkers = new Array();
+            var markerGoogleDirStr;
+            var markerGoogleDirEnd;
+            var markerFinalgDirStr;
+            var markerFinalgDirEnd;
+            var markerBestMarkerStr;
+            var markerBestMarkerEnd;
+
+            var FREE = "free";
+            var SNAP = "snap";
+            var curDrawStyle = FREE;
+
+            var NAVIGATE = "navigate";
+            var DRAW = "draw";
+            var curCursorStyle = NAVIGATE;
+
+            var google_dir;
+            var google_dir_bounds;
+            var initFlag = false;
+
+            var final_gdir;
+
+            var bestPathDirs = new Array();
+            var bestPathPolys = new Array();
+
+            var boundingBoxes = new Array();
+            var routesInBB;			// 2D array containing all the lat/lng points for each SNAPtoRoad routes that lies inside the bounding box
+            var routesInBB2;			// 2D array containing all the lat/lng points for each FREE routes that lies inside the bounding box
+
+            var ptsVerify = new Array(); //For Drawing Best Path Directions
+            var ptsVerCounter = 0; //Counter for Drawing Best Path Directions
+
+            var handleListn1 = new Array(); // listener handles
+            var handleListn2 = new Array();
+            var handleListn3 = new Array();
+            var handleListn4 = new Array();
+            var handleListnAddOverGoogDir = null;
+            var handleListnGoogDir = null;
+            var handleListnAddOverFinalgDir = null;
+            var handleListnFinalgDir = null;
+            var handleListnErrorGoogDir = null;
+            var getBoundsListenerHandle;        //Add get_bounds_event listener once.
+
+            var transToSNAP = false;
+            var oldoldPoint;
+
+            var container;
+
+            var curDistances = new Array();
+            //    var curWeights = new Array();
+            var disableCmbWeight = false;
+
+            var ID_DIJKSTRA = 1;
+            var ID_ASTAR = 2;
+            var ID_NPASA = 3;
+
+            var successors = new Array();
+            var predecessors = new Array();
+
+            var bb_region;
+            var bikeRoute = new Array();
+            var handleListnbikeRoutes = new Array(); //initialize to null
+            var handleListnbikeRoutesOverlay = new Array(); //initialize to null
+
+            var hideRoutesState = true;
+            var hideBestPathState = true;
+
+            var route_weights = new Array();
+            var weightedRoutes = new Array();
+            var wNumRoutes;
+            var chunkNode;
+            var MAXWEIGHT = 5;
+
+            var INFINITY = 999999999;
+
+            var edges = new Array();
+            var vertices = new Array();
+            var distances = new Array();
+            var visited = new Array();
+            var previous = new Array();
+
+            var dijkExecTime =0;
+            var bestDistance = 0;
+            var bestCost=0;
+            var finalNumNodes = 0;
+
+            //Longest Bike Route Length for Extended Dijkstra
+            var longestSegmentDistance = -1;
+
+            var loadFlag = false;
+            var MAX_NODES = 800;
+            //note: last is included always (this is excluding last)
+            var END_NODES_WITHOUT_LAST = 50;
+
+            //Dijkstra
+            var Q = new Array();  //Queue
+            var pi = new Array(); //Predecessors
+
+            var nodesExtractedCount = 0;
+            var preInsertToQ = true;
+
+            //associative array
+            //use for index lookup of the vertex
+            var ptVertex = new Array();
+            var edgeIdx = new Array();
+
+            //Icons
+            var redIcon = new GIcon();
+            redIcon.image = "http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_red.png";
+            redIcon.shadow = "http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_shadow.png";
+            redIcon.iconSize = new GSize(12, 20);
+            redIcon.shadowSize = new GSize(22, 20);
+            redIcon.iconAnchor = new GPoint(6, 20);
+            redIcon.infoWindowAnchor = new GPoint(5, 1);
+
+            function redMarker(point)
+            {
+                // Set up our GMarkerOptions object literal
+                markerOptions = { icon:redIcon };
+                var marker = new GMarker(point, markerOptions);
+                return marker;
+            }
+
+            var greenIcon = new GIcon();
+            greenIcon.image = "http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_green.png";
+            greenIcon.shadow = "http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_shadow.png";
+            greenIcon.iconSize = new GSize(12, 20);
+            greenIcon.shadowSize = new GSize(22, 20);
+            greenIcon.iconAnchor = new GPoint(6, 20);
+            greenIcon.infoWindowAnchor = new GPoint(5, 1);
+
+            function greenMarker(point)
+            {
+                // Set up our GMarkerOptions object literal
+                markerOptions = { icon:greenIcon };
+                var marker = new GMarker(point, markerOptions);
+                return marker;
+            }
+
+            var blueIcon = new GIcon();
+            blueIcon.image = "http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_blue.png";
+            blueIcon.shadow = "http://maps.gstatic.com/mapfiles/ridefinder-images/mm_20_shadow.png";
+            blueIcon.iconSize = new GSize(12, 20);
+            blueIcon.shadowSize = new GSize(22, 20);
+            blueIcon.iconAnchor = new GPoint(6, 20);
+            blueIcon.infoWindowAnchor = new GPoint(5, 1);
+
+            function blueMarker(point)
+            {
+                // Set up our GMarkerOptions object literal
+                markerOptions = { icon:blueIcon };
+                var marker = new GMarker(point, markerOptions);
+                return marker;
+            }
+
+            function InitializeControls()
+            {
+                InitializeCheckboxes();
+            }
+
+            function InitializeCheckboxes()
+            {
+                if(curDrawStyle == FREE)
+                {
+                    document.getElementById("rdDStyleFREE").checked = true;
+                    if(document.getElementById("rdDStyleSNAP") != null)
+                    {
+                        document.getElementById("rdDStyleSNAP").checked = false;
+                    }
+                }
+                else if(curDrawStyle == SNAP)
+                {
+                    document.getElementById("rdDStyleFREE").checked = false;
+                    if(document.getElementById("rdDStyleSNAP") != null)
+                    {
+                        document.getElementById("rdDStyleSNAP").checked = true;
+                    }
+                }
+
+                if(curCursorStyle == NAVIGATE)
+                {
+                    document.getElementById("rdCStyleNAVIGATE").checked = true;
+                    document.getElementById("rdCStyleDRAW").checked = false;
+                }
+                else if(curCursorStyle == DRAW)
+                {
+                    document.getElementById("rdCStyleNAVIGATE").checked = false;
+                    document.getElementById("rdCStyleDRAW").checked = true;
+                }
+            }
+
+            function load() {
+                InitializeControls();
+
+                if (GBrowserIsCompatible()) {
+                    container = document.getElementById("mapDiv");
+                    resizeMap();
+
+                    //Get map object
+                    //        map = new GMap2(document.getElementById("mapDiv"),{draggableCursor:"crosshair"});
+                    map = new GMap2(document.getElementById("mapDiv"));
+
+            function btnHideBestPathClick()
+            {
+                HideBestPath(hideBestPathState);
+
+                    //Add Control to Pan/Zoom
+                    map.addControl(new GLargeMapControl());
+
+                    //Add Control to choose between map views: Map,Satellite, Hybrid
+                    map.addControl(new GMapTypeControl());
+
+                    map.enableScrollWheelZoom();
+
+                    HideDirectionMarkers();
+
+                    //Get a point on map
+                    //      var point = new GLatLng(43.659868, -79.396708);
+                    var point = new GLatLng(43.6845083544836, -79.36248779296875);
+                    //Set map centre with zoom 13
+                    map.setCenter(point, 13);
+
+                    //Get marker at point
+                    var marker = new blueMarker(point);
+                    markers.push(marker);
+                    //Add the overlay
+                    //map.addOverlay(marker);
+                    //Show infoWindow with location info
+                    //marker.openInfoWindowHtml("<B>35 St. George Street, Toronto, ON</B><BR>Great Minds for a Great Future");
+
+                    ProcessAjaxStore(0, null,null);
+                    //Note: ProcessAjaxStore is called by InitStart()
+                    //InitStart();
+
+                    //Scroll to the bottom of the txtText area
+                    ScrollBottom();
+
+                    pageActivated = true;
+
+                    //Add Event Listener for buttonClick
+                    GEvent.addListener(map, "click",
+                    function(marker, point)
+                    {
+                        if(curCursorStyle == DRAW)
+                        {
+                            var direction = new GDirections(map);
+                            var pts = new Array();
+                            pts.push(point);
+                            pts.push(point);
+
+                            insertDrawNewRoutePoint(marker,point);
+                            // Disable SNAP Point for now
+                            /*                GEvent.addListener(direction, "load",
+                      function(direction)
+                      {
+                         // Snap point to road
+                         point = SnapPoint(direction, point);
+                         insertDrawNewRoutePoint(marker,point);
+                      }
+                    );
+
+
+                    GEvent.addListener(direction,"addoverlay", OnDirAddOverlay);
+
+                    direction.loadFromWaypoints(pts, { getSteps:false, getPolyline:true, preserveViewport:true });
+                             */
+                        }
+                    }
+                );
+                }
+            }
+
+            function SnapPoint(direction, point)
+            {
+                var p0 = direction.getPolyline().getVertex(0);
+                return p0;
+            }
+
+            function HideDirectionMarkers()
+            {
+                G_START_ICON.image="";
+                G_START_ICON.shadow ="";
+                G_PAUSE_ICON.image="";
+                G_PAUSE_ICON.shadow ="";
+                G_END_ICON.image="";
+                G_END_ICON.shadow="";
+            }
+
+            function resizeMap() {
+                // container.style.width = document.body.clientWidth - 520 + 'px';
+                if(document.body.clientWidth > 700)
+                {
+                    container.style.width = "700px";
+                }
+                else
+                {
+                    container.style.width = document.body.clientWidth - 520 + 'px';
+                }
+
+                if(document.body.clientHeight > 800)
+                {
+                    container.style.height = "800px";
+                }
+                else
+                {
+                    container.style.height  = document.body.clientHeight - 50 + 'px';
+                }
+
+
+                // container.style.height = document.body.clientHeight - 50 + 'px';
+                if (map)
+                {
+                    map.checkResize();
+                }
+            }
+
+            function geoCode(address)
+            {
+                geocoder.getLatLng(
+                address,
+                function(point)
+                {
+                    if (!point)
+                    {
+                        alert(address + " not found");
+                    }
+                    else
+                    {
+                        insertDrawNewRoutePoint(null,point);
+                    }
+                }
+            );
+            }
+
+            function btnAddLocClick(address)
+            {
+                geoCode(address);
+            }
+
+            function btnHideRoutesClick()
+            {
+                HideDirections(hideRoutesState);
+                HidePolylines(hideRoutesState);
+
+                if(hideRoutesState)
+                {
+                    document.getElementById("btnHideRoutes").value = "Show Routes";
+                }
+                else
+                {
+                    document.getElementById("btnHideRoutes").value = "Hide Routes";
+                }
+
+                hideRoutesState = !hideRoutesState;
+            }
+
+            function btnHideBestPathClick()
+            {
+                HideBestPath(hideBestPathState);
+
+                if(hideBestPathState)
+                {
+                    document.getElementById("btnHideBestPath").value = "Show Best Path";
+                }
+                else
+                {
+                    document.getElementById("btnHideBestPath").value = "Hide Best Path";
+                }
+
+                hideBestPathState = !hideBestPathState;
+            }
+
+
+            function insertDrawNewRoutePoint(marker, point)
+            {
+                //If clicked on marker then remove marker
+                //else add marker and draw polyline between
+                //old and point (current)
+                if (marker)
+                {
+                    map.removeOverlay(marker);
+                }
+                else
+                {
+                    //If oldPoint exists draw line between oldPoint and point (current)
+                    if(oldPoint !=null)
+                    {
+                        if(curDrawStyle == FREE)
+                        {
+                            drawLine(oldPoint, point, GetCurWeightColor(), false);
+                            allPoints.push(point);
+                        }
+                        else
+                        {
+                            wayPoints.push(point);
+                            drawDirection(wayPoints, GetCurWeightColor(), false);
+                        }
+                    }
+                    else
+                    {
+                        if(curDrawStyle == FREE)
+                        {
+                            allPoints.push(point);
+                        }
+                        else
+                        {
+                            wayPoints.push(point);
+                        }
+                    }
+
+                    marker = new blueMarker(point);
+                    markers.push(marker);
+                    map.addOverlay(marker);
+
+                    if(oldPoint == null)
+                    {
+                        if(curDrawStyle == SNAP)
+                        {
+                            transToSNAP = true;
+                        }
+                    }
+
+                    oldoldPoint = oldPoint;
+                    //point (current) is the oldPoint now
+                    oldPoint = point;
+                }
+            }
+
+            //Drawline between point1 and point2
+            function drawLine(point1, point2, color, IsLoadedPoly)
+            {
+                var points = new Array();
+                points.push(point1);
+                points.push(point2);
+
+                var polyline = new GPolyline(points,color,5,0.7);
+                map.addOverlay(polyline);
+
+                if(IsLoadedPoly)
+                {
+                    loadedPolylines.push(polyline);
+                    loadedAllPointsArray.push(points);
+                }
+                else
+                {
+                    polylines.push(polyline);
+                    //            UpdateWeight(false);
+                }
+            }
+
+            function drawPolyLine(points, color, IsLoadedPoly)
+            {
+                var polyline = new GPolyline(points,color,5,0.7);
+                map.addOverlay(polyline);
+
+                if(IsLoadedPoly)
+                {
+                    loadedPolylines.push(polyline);
+                    loadedAllPointsArray.push(points);
+                }
+                else
+                {
+                    polylines.push(polyline);
+                    //            UpdateWeight(false);
+                }
+            }
+
+            function drawAlreadyArrayLoadedDirection(wayPoints, color)
+            {
+                var direction = new GDirections(map);
+
+                handleListn2 = GEvent.addListener(direction,"addoverlay", OnDirAddOverlay);
+                handleListn3 = GEvent.addListener(direction, "load",
+                function(direction)
+                {
+                    OnDirLoad(direction, color);
+                }
+            );
+
+                direction.loadFromWaypoints(wayPoints, {"preserveViewport": true});
+                loadedDirections.push(direction);
+                //loadedWayPointsArray.push(wayPoints);
+            }
+            //Draw Direction between point1 and point2
+            function drawDirection(wayPoints, color, IsLoadedDirection)
+            {
+                if(IsLoadedDirection)
+                {
+                    var direction = new GDirections(map);
+
+                    handleListn2 = GEvent.addListener(direction,"addoverlay", OnDirAddOverlay);
+                    handleListn3 = GEvent.addListener(direction, "load",
+                    function(direction)
+                    {
+                        OnDirLoad(direction, color);
+                    }
+                );
+
+
+                    direction.loadFromWaypoints(wayPoints, {"preserveViewport": true});
+                    loadedDirections.push(direction);
+                    loadedWayPointsArray.push(wayPoints);
+                }
+                else
+                {
+                    if(directions[curDirIdx] == null)
+                    {
+                        directions[curDirIdx] = new GDirections(map);
+                    }
+
+                    if(handleListn1[curDirIdx] != null)
+                    {
+                        GEvent.removeListener(handleListn1[curDirIdx]);
+                    }
+
+                    if(handleListn2[curDirIdx] !=null)
+                    {
+                        GEvent.removeListener(handleListn2[curDirIdx]);
+                    }
+
+                    if(handleListn3[curDirIdx] !=null)
+                    {
+                        GEvent.removeListener(handleListn3[curDirIdx]);
+                    }
+
+                    if(handleListn4[curDirIdx] !=null)
+                    {
+                        GEvent.removeListener(handleListn4[curDirIdx]);
+                    }
+
+                    if(transToSNAP)
+                    {
+                        handleListn1[curDirIdx] = GEvent.addListener(directions[curDirIdx], "load", onDirectionsLoad);
+                    }
+                    handleListn2[curDirIdx] = GEvent.addListener(directions[curDirIdx], "addoverlay", OnDirAddOverlay);
+                    handleListn3[curDirIdx] = GEvent.addListener(directions[curDirIdx], "load",
+                    function(direction)
+                    {
+                        OnDirLoad(direction, color);
+                    }
+                );
+
+                    handleListn4[curDirIdx] = GEvent.addListener(directions[curDirIdx], "error",
+                    function()
+                    {
+                        alert("Draw Direction load error status: " + directions[curDirIdx].getStatus().code);
+                    }
+                );
+
+
+                    directions[curDirIdx].loadFromWaypoints(wayPoints, {"preserveViewport": true});
+
+                    //             UpdateWeight(false);
+                }
+            }
+
+            function OnDirLoad(direction,color)
+            {
+                var polyline = direction.getPolyline();
+                polyline.color = color;
+                polyline.opacity = 0.7;
+                polyline.weight = 5;
+            }
+
+            function OnDirAddOverlay(direction)
+            {
+                var i =0;
+                for(i =0; i< direction.getNumGeocodes(); i++)
+                {
+                    map.removeOverlay(direction.getMarker(i));
+                }
+            }
+
+            function onDirectionsLoad(direction)
+            {
+                //        var route = directions[curDirIdx].getRoute(0);
+                var route = direction.getRoute(0);
+
+                if(route != null)
+                {
+                    var step = route.getStep(0);
+                    if(step != null)
+                    {
+                        if(transToSNAP)
+                        {
+                            //                    if(step.getLatLng() != oldoldPoint +/- 0.1)
+                            /*
+                        if(
+                            !( (oldoldPoint.lat() > (step.getLatLng().lat() - 0.0005)) && (oldoldPoint.lat() < (step.getLatLng().lat() + 0.0005)) )
+                            &&
+                            !( (oldoldPoint.lng() > (step.getLatLng().lng() - 0.0005)) && (oldoldPoint.lng() < (step.getLatLng().lng() + 0.0005)) )
+                           )
+                        {
+                            var prevAllPoints;
+                            if(allPointsArray.length == 0)
+                            {
+                                prevAllPoints = new Array();
+                                prevAllPoints.push(oldoldPoint);
+                            }
+                            else
+                            {
+                                prevAllPoints = allPointsArray.pop();
+                            }
+                            prevAllPoints.push(step.getLatLng());
+                            allPointsArray.push(prevAllPoints);
+                            drawLine(oldoldPoint, step.getLatLng(), GetCurWeightColor(), false);
+                        }
+                             */
+                            transToSNAP = false;
+                        }
+                    }
+                }
+
+                /*
+            var poly = directions[curDirIdx].getPolyline();
+            for (var i=0; i<poly.getVertexCount()-1; i++)
+           {
+               var p1 = poly.getVertex(i);
+               var p2 = poly.getVertex(i+1);
+               map.addOverlay(new GPolyline([p1,p2]));
+           }
+                 */
+            }
+
+            function GetCurWeight()
+            {
+                return document.getElementById("cmbWeight").value
+            }
+
+            function GetCurWeightColor()
+            {
+                var color;
+                var curWeight = GetCurWeight();
+                color = GetColorFromWeight(curWeight);
+
+                if(color == null) { color = "RED"; }
+
+                if(pageActivated)
+                {
+                    disableCmbWeight = true;
+                    document.getElementById("cmbWeight").disabled = disableCmbWeight;
+                }
+
+                return color;
+            }
+
+            function GetColorFromWeight(weight)
+            {
+                var color = null;
+                if(weight == 1)
+                {
+                    color = "RED";
+                }
+                else if(weight == 2)
+                {
+                    color = "GREEN";
+                }
+                else if(weight == 3)
+                {
+                    color = "BLUE";
+                }
+
+                return color;
+            }
+
+            /*
+        function UpdateWeight(clear)
+        {
+            if(clear)
+            {
+                curWeights = new Array();
+            }
+
+            function drawAndMarkMultiplePolys(line)
+            {
+                var stepWeight = document.getElementById("cmbWeight").value;
+                 curWeights.push(stepWeight);
+            }
+            document.getElementById("txtWeight").value = curWeights;
+        }
+             */
+
+            function btnAjaxStoreClick()
+            {
+                //Code might be buggy here
+                allPointsArray.push(allPoints);
+                for(var i =0; i<allPointsArray.length; i++)
+                {
+                    var allPoints_i = ArrStringsToGPoints(allPointsArray[i]);
+                    loadedPolylines.push(polylines[i]);
+                    loadedAllPointsArray.push(allPoints_i);
+                    weightedRoutes.push(allPoints_i);
+                    route_weights.push(GetCurWeight());
+                    ProcessAjaxStore(2,allPoints_i,FREE);
+                }
+                allPointsArray = new Array();
+                allPoints = new Array();
+                polylines = new Array();
+
+
+                wayPointsArray.push(wayPoints);
+                for(var i =0; i<wayPointsArray.length; i++)
+                {
+                    var wayPoints_i = ArrStringsToGPoints(wayPointsArray[i]);
+                    loadedDirections.push(directions[i]);
+                    loadedWayPointsArray.push(wayPoints_i);
+                    weightedRoutes.push(wayPoints_i);
+                    route_weights.push(GetCurWeight());
+                    ProcessAjaxStore(2,wayPoints_i,SNAP);
+                }
+                wayPointsArray = new Array();
+                wayPoints = new Array();
+                directions = new Array();
+                curDirIdx = 0;
+
+                for(var i =0; i < markers.length; i++)
+                {
+                    if(markers[i] != null)
+                    {
+                        map.removeOverlay(markers[i]);
+                    }
+                }
+
+                oldPoint = null;
+                curDirIdx++;
+
+                if(disableCmbWeight)
+                {
+                    document.getElementById("cmbWeight").disabled = false;
+                }
+            }
+
+            function btnAjaxClearClick()
+            {
+                ProcessAjaxStore(3, null,null);
+            }
+
+            function btnAjaxUndoClick()
+            {
+                for(var i =0; i < polylines.length; i++)
+                {
+                    if(polylines[i] != null)
+                    {
+                        map.removeOverlay(polylines[i]);
+                    }
+                }
+                polylines = new Array();
+
+                for(var i =0; i < directions.length; i++)
+                {
+                    if(directions[i] != null)
+                    {
+                        directions[i].clear();
+                    }
+                }
+                directions = new Array();
+
+                for(var i =0; i < markers.length; i++)
+                {
+                    if(markers[i] != null)
+                    {
+                        map.removeOverlay(markers[i]);
+                    }
+                }
+                markers = new Array();
+
+                allPoints = new Array();
+                wayPoints = new Array();
+
+                allPointsArray = new Array();
+                wayPointsArray = new Array();
+
+                curDirIdx = 0;
+                oldPoint = null;
+
+                if(google_dir != null)
+                {
+                    google_dir.clear();
+                }
+
+                if(disableCmbWeight)
+                {
+                    document.getElementById("cmbWeight").disabled = false;
+                }
+
+                //      UpdateWeight(true);
+            }
+
+            function btnAjaxDeleteRouteClick()
+            {
+                hideRoutesState = false;
+                document.getElementById("btnHideRoutes").value = "Hide Routes";
+                ProcessAjaxStore(5, null,null);
+            }
+
+            function GetXmlHttpObject()
+            {
+                var xmlHttp;
+                try
+                {
+                    // Firefox, Opera 8.0+, Safari
+                    xmlHttp=new XMLHttpRequest();
+                }
+                catch (e)
+                {
+                    // Internet Explorer
+                    try
+                    {
+                        xmlHttp=new ActiveXObject("Msxml2.XMLHTTP");
+                    }
+                    catch (e)
+                    {
+                        try
+                        {
+                            xmlHttp=new ActiveXObject("Microsoft.XMLHTTP");
+                        }
+                        catch (e)
+                        {
+                            alert("AJAX is not supported by the browser");
+                            return false;
+                        }
+                    }
+                }
+                return xmlHttp;
+            }
+
+            function InitStart()
+            {
+                var address = "http://www.mybikeroutes.com/cgi-files/new.php";
+                var getPart = "";
+
+                GDownloadUrl(address, function(data)
+                {
+                    // The request is complete
+                    document.getElementById("nonce").value = data;
+                    ProcessAjaxStore(0, null,null);
+                },getPart, "application/x-www-form-urlencoded");
+            }
+
+            function ProcessDijkstra()
+            {
+                var address = "http://www.mybikeroutes.com/cgi-files/dijkstra_2.php";
+                var getPart = "lengthD=" + dGraph.length + "&lengthV=" + vertices.length + "&dGraph=" + encodeURIComponent(dGraph) + "&ref=" + Math.random();
+
+                GDownloadUrl(address, function(data)
+                {
+                    // The request is complete
+                    document.getElementById("txtText").value = data;
+                    ExecuteServerDijkstra();
+                },getPart);
+            }
+
+            function ProcessAjaxStore(readWrite, pointStore,drawStyle)
+            {
+                var intervalDoProcess =  setInterval("doProcess()", 50);
+
+                var address = "http://www.mybikeroutes.com/cgi-files/test.php";
+                var weight = document.getElementById("cmbWeight").value;
+                var distance = document.getElementById("txtDistance").value;
+                var routeName = document.getElementById("txtRouteName").value;
+                if(distance == "")
+                {
+                    distance = 0;
+                }
+
+                var getPart = "hdnPoint=" + encodeURIComponent(pointStore) + "&readWrite=" + readWrite + "&drawStyle=" + drawStyle + "&weight=" + weight + "&dist="+ distance + "&routeName=" + routeName +  "&nonce=" +  document.getElementById("nonce").value + "&ref=" + Math.random();
+
+                GDownloadUrl(address, function(data)
+                {
+                    // The request is complete
+                    document.getElementById("txtText").value = data;
+
+                    if((readWrite == 0) || (readWrite==5))
+                    {
+                        clearAll();
+                        ReDrawLines(document.getElementById("txtText").value);
+                    }
+                    else if(readWrite == 3)
+                    {
+                        clearAll();
+                        document.getElementById("txtText").value = "Points Cleared.\n";
+                    }
+                    clearInterval(intervalDoProcess);
+                    endProcess();
+
+                    ScrollBottom();
+
+                },getPart, "application/x-www-form-urlencoded");
+            }
+
+            //Scroll to the bottom of the txtText area
+            function ScrollBottom()
+            {
+                var obj=document.getElementById('txtText');
+                obj.scrollTop=obj.scrollHeight;
+            }
+
+            function trim(stringToTrim)
+            {
+                return stringToTrim.replace(/^\s+|\s+$/g,"");
+            }
+            function ltrim(stringToTrim)
+            {
+                return stringToTrim.replace(/^\s+/,"");
+            }
+
+            function rtrim(stringToTrim)
+            {
+                return stringToTrim.replace(/\s+$/,"");
+            }
+
+            function aToGPoint(sPoint)
+            {
+                var pointA = sPoint.split(",");
+                var pointR = new GLatLng(pointA[0].substring(1,pointA[0].length), pointA[1].substring(0,pointA[1].length-1));
+
+                return pointR;
+            }
+
+            function ArrStringsToGPoints(arr)
+            {
+                var i = 0;
+                var j = 0;
+                var convertArray = new Array(arr.length);
+
+                for(i=0; i< arr.length; i++)
+                {
+                    convertArray[i] = aToGPoint(arr[i].toString());
+                }
+
+                return convertArray;
+            }
+
+            function drawAndMarkMultiplePolys(line)
+            {
+                var lineSplit = trim(line).split(";");
+                var latsLngs = lineSplit[0].split(",");
+                var drawStyle = lineSplit[1];
+                var weight = lineSplit[2];
+                var color = GetColorFromWeight(lineSplit[2]);
+
+                if(drawStyle == SNAP)
+                {
+                    var dWayPoints = new Array();
+                    var oldPoint = null;
+                    var newPoint = null;
+
+                    for(var i=0; i< latsLngs.length; i= i+2)
+                    {
+                        var latLng = new Array();
+                        latLng.push(latsLngs[i]);
+                        latLng.push(latsLngs[i+1]);
+                        var pt0 = aToGPoint(latLng.toString());
+                        dWayPoints.push(pt0);
+
+                        newPoint = pt0;
+                        checkLongestLength(oldPoint, newPoint);
+                        oldPoint = newPoint;
+                    }
+
+                    route_weights.push(weight);
+                    weightedRoutes.push(dWayPoints);
+                    loadedWayPointsArray.push(dWayPoints);
+                    loadedWayColors.push(color);
+
+                    //Note: We draw from loadedWayArrays in DrawLoadedWays() later
+                    //           setTimeout("drawDirection(\"" + dWayPoints + "\",\"" + color + "\",\"" + true + "\")", 500);
+                    //           setTimeout(drawD, 500);
+                }
+                else
+                {
+                    var points = new Array();
+                    var oldPoint = null;
+                    var newPoint = null;
+                    for(var i=0; i< latsLngs.length -1; i=i+2)
+                    {
+                        var latLng = new Array();
+                        latLng.push(latsLngs[i]);
+                        latLng.push(latsLngs[i+1]);
+
+                        var pt0 = aToGPoint(latLng.toString());
+                        points.push(pt0);
+
+                        newPoint = pt0;
+                        checkLongestLength(oldPoint, newPoint);
+                        oldPoint = newPoint;
+                    }
+
+                    route_weights.push(weight);
+                    weightedRoutes.push(points);
+
+                    drawPolyLine(points, color, true);
+                }
+
+                for(i= 0; i < bestPathDirs.length;i++)
+                {
+                    var dummyPoly = bestPathDirs[i].getPolyline();
+                    if(dummyPoly != null)
+                    {
+                        if(toHide)
+                        {
+                            dummyPoly.hide();
+                        }
+                        else
+                        {
+                            dummyPoly.show();
+                        }
+                    }
+                }
+            }
+
+
+            //Find longest Bike route for Extended Dijkstra search
+            function checkLongestLength(oldPoint, newPoint)
+            {
+                if(oldPoint != null)
+                {
+                    var curSegmentDistance = newPoint.distanceFrom(oldPoint);
+                    //If curSegmentDistance is longer than 10 km then it is
+                    //too long a bike route, disregard it.
+                    if(curSegmentDistance < 10000)
+                    {
+                        if(curSegmentDistance > longestSegmentDistance)
+                        {
+                            longestSegmentDistance = curSegmentDistance;
+                        }
+                    }
+                }
+            }
+
+            //Draw from the loadedWayPoints (Initial load)
+            function drawLoadedWays()
+            {
+                if(loadedWayCounter < loadedWayPointsArray.length)
+                {
+                    doProcess();
+                    var color = loadedWayColors[loadedWayCounter];
+                    var dummyWayPoints = loadedWayPointsArray[loadedWayCounter++];
+                    if(dummyWayPoints.length > 0)
+                    {
+                        drawAlreadyArrayLoadedDirection(dummyWayPoints,color);
+                    }
+                    setTimeout(drawLoadedWays, 500);
+                }
+                else
+                {
+                    loadedWayCounter = 0;
+                    endProcess();
+                }
+            };
+
+
+            function ReDrawLines(reLines)
+            {
+                var multLines = reLines.split("\n");
+
+                route_weights = new Array();
+                wNumRoutes = 0;
+                weightedRoutes = new Array();
+
+                for(var i=0; i< multLines.length; i++)
+                {
+                    if((multLines[i] !="") && (multLines[i] != "undefined"))
+                    {
+                        drawAndMarkMultiplePolys(multLines[i]);
+                    }
+                }
+
+                //Now draw from all the loadedWayPointsArray
+                drawLoadedWays();
+            }
+
+            function drawStyleChange(dStyle)
+            {
+                if(curDrawStyle != dStyle && (oldPoint!=null))
+                {
+                    if(curDrawStyle == FREE)
+                    {
+                        transToSNAP = true;
+                        allPointsArray.push(allPoints);
+                        allPoints = new Array();
+                        wayPoints.push(oldPoint);
+                    }
+                    else
+                    {
+                        wayPointsArray.push(wayPoints);
+                        wayPoints = new Array();
+                        allPoints.push(oldPoint);
+                        curDirIdx++;
+                    }
+                }
+
+                curDrawStyle = dStyle;
+            }
+
+
+            function cursorStyleChange(dStyle)
+            {
+                if(dStyle == NAVIGATE)
+                {
+                    map.getDragObject().setDraggableCursor("default");
+                }
+                else if(dStyle == DRAW)
+                {
+                    map.getDragObject().setDraggableCursor("crosshair");
+                }
+                curCursorStyle = dStyle;
+            }
+
+            function HidePolylines(toHide)
+            {
+                var i =0;
+
+                for(i =0; i < loadedPolylines.length; i++)
+                {
+                    if(toHide)
+                    {
+                        loadedPolylines[i].hide();
+                    }
+                    else
+                    {
+                        loadedPolylines[i].show();
+                    }
+                }
+
+                for(i=0; i< polylines.length; i++)
+                {
+                    if(toHide)
+                    {
+                        polylines[i].hide();
+                    }
+                    else
+                    {
+                        polylines[i].show();
+                    }
+                }
+            }
+
+            function HideDirections(toHide)
+            {
+                var i =0;
+
+                for(i =0; i < loadedDirections.length; i++)
+                {
+                    if(loadedDirections[i] != null)
+                    {
+                        var dummyPoly1 = loadedDirections[i].getPolyline();
+                        if(dummyPoly1!= null)
+                        {
+                            if(toHide)
+                            {
+                                dummyPoly1.hide();
+                            }
+                            else
+                            {
+                                dummyPoly1.show();
+                            }
+                        }
+                    }
+                }
+
+                for(i=0; i< directions.length; i++)
+                {
+                    if(directions[i] != null)
+                    {
+                        var dummyPoly2 = directions[i].getPolyline();
+
+                        if(dummyPoly2 != null)
+                        {
+                            if(toHide)
+                            {
+                                dummyPoly2.hide();
+                            }
+                            else
+                            {
+                                dummyPoly2.show();
+                            }
+                        }
+                    }
+                }
+            }
+
+            function HideBestPath(toHide)
+            {
+                alert("Invalid address!");
+                initFlag = false;
+                google_dir.clear();
+                google_dir = null;
+            }
+
+            function OnLoadGoogleDir(direction)
+            {
+                var polyline = direction.getPolyline();
+                /*      polyline.color = "Maroon";
+          polyline.opacity = 0.7;
+                 */
+                loadFlag = true;
+
+                markerGoogleDirStr = new greenMarker(polyline.getVertex(0));
+                markerGoogleDirEnd = new redMarker(polyline.getVertex(polyline.getVertexCount() -1));
+                polyline.hide();
+
+                map.addOverlay(markerGoogleDirStr);
+                map.addOverlay(markerGoogleDirEnd);
+
+                if(document.getElementById("chkShowSReg").checked)
+                {
+                    if((markerBestMarkerStr) && !(markerBestMarkerStr.isHidden()))
+                    {
+                        markerBestMarkerStr.hide();
+                    }
+                    if((markerBestMarkerEnd) && !(markerBestMarkerEnd.isHidden()))
+                    {
+                        markerBestMarkerEnd.hide();
+                    }
+                }
+
+                google_dir_bounds = direction.getBounds();
+
+                btnBestPathClick();
+            }
+
+            function showEndInfoWindow()
+            {
+                markerGoogleDirEnd.openInfoWindowHtml("<H1>End</H1>");
+            }
+
+            function OnAddOvelayGoogleDir(direction)
+            {
+                OnDirAddOverlay(direction);
+            }
+
+            function btnBestPathClick()
+            {
+                //     alert("Please visit http://www.mybikeroutes.com/index_amit.html with params: 1. 2350 dundas street west, toronto, on & 2. 86 humberside avenue, toronto, on");
+
+                if (initFlag)
+                {
+                    OverlayBestRoute();
+                }
+                else
+                {
+                    if((markerBestMarkerStr) && (markerBestMarkerStr.isHidden()))
+                    {
+                        markerBestMarkerStr.show();
+                    }
+                    if((markerBestMarkerEnd) && (markerBestMarkerEnd.isHidden()))
+                    {
+                        markerBestMarkerEnd.show();
+                    }
+                }
+
+                var i =0;
+                for(i = 0; i < bestPathPolys.length; i++)
+                {
+                    if(toHide)
+                    {
+                        bestPathPolys[i].hide();
+                    }
+                    else
+                    {
+                        bestPathPolys[i].show();
+                    }
+                }
+
+                for(i= 0; i < bestPathDirs.length;i++)
+                {
+                    var dummyPoly = bestPathDirs[i].getPolyline();
+                    if(dummyPoly != null)
+                    {
+                        if(toHide)
+                        {
+                            dummyPoly.hide();
+                        }
+                        else
+                        {
+                            dummyPoly.show();
+                        }
+                    }
+                }
+            }
+
+            function ClearEdgesVertices()
+            {
+                for(var i =0; i < edges.length; i++)
+                {
+                    edges[i] = null;
+                }
+
+                edges = new Array();
+                vertices = new Array();
+            }
+
+            function ClearBestPath()
+            {
+                if(markerBestMarkerStr)
+                {
+                    map.removeOverlay(markerBestMarkerStr);
+                }
+                if(markerBestMarkerEnd)
+                {
+                    map.removeOverlay(markerBestMarkerEnd);
+                }
+
+                var i =0;
+                for(i = 0; i < bestPathPolys.length; i++)
+                {
+                    map.removeOverlay(bestPathPolys[i]);
+                }
+
+                for(i= 0; i < bestPathDirs.length;i++)
+                {
+                    var dummyPoly = bestPathDirs[i].getPolyline();
+                    if(dummyPoly != null)
+                    {
+                        map.removeOverlay(dummyPoly);
+                    }
+                }
+            }
+
+
+            function ClearBoundingBoxes()
+            {
+                var i =0;
+
+                for(i =0; i < boundingBoxes.length; i++)
+                {
+                    map.removeOverlay(boundingBoxes[i]);
+                }
+            }
+
+            // clear all overlays i.e. routes from the map
+            function clearAll()
+            {
+                for(var i =0; i < polylines.length; i++)
+                {
+                    if(polylines[i] != null)
+                    {
+                        map.removeOverlay(polylines[i]);
+                    }
+                }
+                polylines = new Array();
+
+                for(var i =0; i < loadedPolylines.length; i++)
+                {
+                    if(loadedPolylines[i] != null)
+                    {
+                        map.removeOverlay(loadedPolylines[i]);
+                    }
+                }
+                loadedPolylines = new Array();
+
+                for(var i =0; i < directions.length; i++)
+                {
+                    if(directions[i] != null)
+                    {
+                        directions[i].clear();
+                    }
+                }
+                directions = new Array();
+
+                for(var i =0; i < loadedDirections.length; i++)
+                {
+                    if(loadedDirections[i] != null)
+                    {
+                        loadedDirections[i].clear();
+                    }
+                }
+                loadedDirections = new Array();
+
+                for(i =0; i < markers.length; i++)
+                {
+                    if(markers[i] != null)
+                    {
+                        map.removeOverlay(markers[i]);
+                    }
+                }
+                markers = new Array();
+
+                for(i =0; i < loadedMarkers.length; i++)
+                {
+                    if(loadedMarkers[i] != null)
+                    {
+                        map.removeOverlay(loadedMarkers[i]);
+                    }
+                }
+                loadedMarkers = new Array();
+
+                allPoints = new Array();
+                wayPoints = new Array();
+
+                allPointsArray = new Array();
+                loadedAllPointsArray = new Array();
+
+                wayPointsArray = new Array();
+                loadedWayPointsArray = new Array();
+                loadedWayColors = new Array();
+                loadedWayCounter = 0;
+
+                ClearBoundingBoxes();
+                boundingBoxes = new Array();
+                weightedRoutes = new Array();
+                vertices = new Array();
+                route_weights = new Array();
+
+                curDirIdx = 0;
+                oldPoint = null;
+
+                if(google_dir != null)
+                {
+                    google_dir.clear();
+                }
+            }
+
+            var searchStarTime;
+            var searchEndTime;
+            //Handler for search button click
+            function btnSearchClick()
+            {
+                searchStartTime = new Date().getTime();
+
+                var src = document.getElementById("txtFrom").value;
+                var dst = document.getElementById("txtTo").value;
+                bb_region = document.getElementById("cmbBB").value;
+
+                if (bb_region == "1") bb_region = -0.001;
+                else if (bb_region == "2") bb_region = 0.002;
+                else if (bb_region == "3") bb_region = 0.003;
+                else if (bb_region == "4") bb_region = 0.004;
+                else if (bb_region == "5") bb_region = 0.005;
+
+
+                if (!src || !dst)
+                {
+                    alert("Invalid input!");
+                }
+                else
+                {
+                    queryGoogle(src, dst);
+                }
+            }
+
+            function queryGoogle(src, dst)
+            {
+                if(google_dir != null)
+                {
+                    map.removeOverlay(markerGoogleDirStr);
+                    map.removeOverlay(markerGoogleDirEnd);
+                    google_dir.clear();
+                }
+                google_dir = new GDirections(map);
+
+                if(handleListnGoogDir != null)
+                {
+                    GEvent.removeListener(handleListnGoogDir);
+                }
+                if(handleListnAddOverGoogDir !=null)
+                {
+                    GEvent.removeListener(handleListnAddOverGoogDir);
+                }
+                handleListnGoogDir = GEvent.addListener(google_dir, "load", OnLoadGoogleDir);
+                handleListnErrorGoogDir = GEvent.addListener(google_dir, "error", OnErrorGoogleDir);
+                handleListnAddOverGoogDir = GEvent.addListener(google_dir,"addoverlay", OnAddOvelayGoogleDir);
+
+                google_dir.load(src + " to " + dst, {"getPolyline": true, "getSteps": true});
+
+                initFlag = true;
+            }
+
+            function OnErrorGoogleDir()
+            {
+                alert("Invalid address!");
+                initFlag = false;
+                google_dir.clear();
+                google_dir = null;
+            }
+
+            function OnLoadGoogleDir(direction)
+            {
+                var polyline = direction.getPolyline();
+                /*      polyline.color = "Maroon";
+          polyline.opacity = 0.7;
+                 */
+                loadFlag = true;
+
+                markerGoogleDirStr = new greenMarker(polyline.getVertex(0));
+                markerGoogleDirEnd = new redMarker(polyline.getVertex(polyline.getVertexCount() -1));
+                polyline.hide();
+
+                map.addOverlay(markerGoogleDirStr);
+                map.addOverlay(markerGoogleDirEnd);
+
+                if(document.getElementById("chkShowSReg").checked)
+                {
+                    markerGoogleDirStr.openInfoWindowHtml("<H1>Start</H1>");
+                    setTimeout("showEndInfoWindow()", 4000);
+                }
+
+                google_dir_bounds = direction.getBounds();
+
+                btnBestPathClick();
+            }
+
+            function showEndInfoWindow()
+            {
+                markerGoogleDirEnd.openInfoWindowHtml("<H1>End</H1>");
+            }
+
+            function OnAddOvelayGoogleDir(direction)
+            {
+                OnDirAddOverlay(direction);
+            }
+
+            function btnBestPathClick()
+            {
+                //     alert("Please visit http://www.mybikeroutes.com/index_amit.html with params: 1. 2350 dundas street west, toronto, on & 2. 86 humberside avenue, toronto, on");
+
+                if (initFlag)
+                {
+                    OverlayBestRoute();
+                }
+                else
+                {
+                    alert("Enter address first!");
+                }
+            }
+
+            function OverlayBestRoute()
+            {
+
+                var sPoint = document.getElementById("txtFrom").value;
+                var ePoint =  document.getElementById("txtTo").value;
+
+                //Add get_bounds_event listener once.
+                GetBounds(sPoint, ePoint);
+            }
+
+            function GetBounds(sPoint, ePoint)
+            {
+                routeInBoundingBoxSweep();
+                bb_region = 0; 	// reset bounding box area coverage
+            }
+
+            function doProcess()
+            {
+                var process = document.getElementById("txtProcess");
+                process.style.fontWeight = 700;
+                process.style.color = "RED";
+
+                if( (process.value.length == 0) || (process.value.length > 30))
+                {
+                    process.value = "Processing";
+                }
+                else
+                {
+                    process.value = process.value + ".";
+                }
+            }
+
+            function endProcess()
+            {
+                var process = document.getElementById("txtProcess");
+                process.value = "";
+            }
+
+
+            /* takes in as parameter a GDirections object and a string
+             * get your colors here
+             * http://myhome.shinbiro.com/~kbyon/studio/colors.htm
+             */
+            function colorBikeRoutes(routeObj)
+            {
+                var polyline = routeObj.getPolyline();
+                polyline.color = "RED";
+                polyline.opacity = 1.0;
+
+                for(var i = 0; i < routeObj.getNumGeocodes(); i++)
+                {
+                    map.removeOverlay(routeObj.getMarker(i));
+                }
+            }
+
+            function OnRemoveOverlay(routeObj)
+            {
+                var polyline = routeObj.getPolyline();
+
+                for(var i = 0; i < routeObj.getNumGeocodes(); i++)
+                {
+                    map.removeOverlay(routeObj.getMarker(i));
+                }
+            }
+
+            function dummyFunc()
+            {}
+
+            function changeColor(routeArr, index)
+            {
+                bikeRoute[index] = new GDirections(map);
+
+                if(handleListnbikeRoutes[index] != null)
+                {
+                    GEvent.removeListener(handleListnbikeRoutes[index]);
+                }
+                if(handleListnbikeRoutesOverlay[index] != null)
+                {
+                    GEvent.removeListener(handleListnbikeRoutesOverlay[index]);
+                }
+
+                handleListnbikeRoutesOverlay[index] = GEvent.addListener(bikeRoute[index],"addoverlay", OnRemoveOverlay);
+                handleListnbikeRoutes[index] = GEvent.addListener(bikeRoute[index],"load", colorBikeRoutes);
+                bikeRoute[index].loadFromWaypoints(routeArr, {"preserveViewport": true});
+
+                setTimeout("dummyFunc()", 500);
+            }
+
+            function OnLoadFinalgDir(direction)
+            {
+                var polyline = direction.getPolyline();
+                polyline.color = "GREEN";
+                polyline.opacity = 0.7;
+            }
+
+            function OnAddOverlayFinalgDir(direction)
+            {
+                OnDirAddOverlay(direction);
+                document.getElementById("hiddenDIV").innerHTML = '';
+            }
+
+            //Dec 10,2009
+            //Not used
+            function drawBoundingBox(pt_start, pt_end, offset)
+            {
+                var pt_start_lat = pt_start.lat() - offset;
+                var pt_start_lng = pt_start.lng() - offset;
+                var pt_end_lat = pt_end.lat() + offset;
+                var pt_end_lng = pt_end.lng() + offset;
+
+                var bounding_box = new GPolygon([new GLatLng(pt_start_lat, pt_start_lng),
+                    new GLatLng(pt_end_lat, pt_start_lng),
+                    new GLatLng(pt_end_lat, pt_end_lng),
+                    new GLatLng(pt_start_lat, pt_end_lng),
+                    new GLatLng(pt_start_lat, pt_start_lng)],
+                "#f33f00", 1, 1, "#ff0000", 0.1);
+
+                boundingBoxes.push(bounding_box);
+                map.addOverlay(bounding_box);
+            }
+
+            //Dec 10, 2009
+            //Not used
+            function routeInBoundingBox()
+            {
+                var index;
+                var ptArray;
+                var start;
+                var end;
+
+                routesInBB = new Array();
+
+                //changeTest
+                /*
+          for (i = 0; i < loadedAllPointsArray.length ; i++)
+          {
+              ptArray = new Array();
+
+              for (j = 0; j < loadedAllPointsArray[i].length; j++)
+              {
+                  start = google_dir_bounds.containsLatLng(loadedAllPointsArray[i][j]);
+
+                  if (j < (loadedAllPointsArray[i].length - 1))
+                  {
+                      end = google_dir_bounds.containsLatLng(loadedAllPointsArray[i][j + 1]);
+
+                      if (start && end)
+                  {
+                          ptArray.push(loadedAllPointsArray[i][j]);
+                          ptArray.push(loadedAllPointsArray[i][j + 1]);
+                          j++;
+                      }
+                 }
+                 else if (j == (loadedAllPointsArray[i].length - 1))
+                 {
+                      if (start)
+                      {
+                          ptArray.push(loadedAllPointsArray[i][j]);
+                      }
+                  }
+              }
+
+              if(ptArray.length > 0)
+              {
+                  routesInBB.push(ptArray);
+              }
+          }
+                 */
+                for (i = 0; i < loadedWayPointsArray.length; i++)
+                {
+                    ptArray = new Array();
+
+                    for (j = 0; j < loadedWayPointsArray[i].length; j++)
+                    {
+                        start = google_dir_bounds.containsLatLng(loadedWayPointsArray[i][j]);
+
+                        if (j < (loadedWayPointsArray[i].length - 1))
+                        {
+                            end = google_dir_bounds.containsLatLng(loadedWayPointsArray[i][j + 1]);
+
+                            if (start && end)
+                            {
+                                ptArray.push(loadedWayPointsArray[i][j]);
+                                ptArray.push(loadedWayPointsArray[i][j + 1]);
+                                j++;
+                            }
+                        }
+                        else if (j == (loadedWayPointsArray[i].length - 1))
+                        {
+                            if (start)
+                            {
+                                ptArray.push(loadedWayPointsArray[i][j]);
+                            }
+                        }
+                    }
+
+                    if(ptArray.length > 0)
+                    {
+                        routesInBB.push(ptArray);
+                    }
+                }
+            }
+
+            function drawBoundingBox2(pt_start_lat, pt_start_lng, pt_end_lat, pt_end_lng)
+            {
+                var bounding_box = new GPolygon([new GLatLng(pt_start_lat, pt_start_lng),
+                    new GLatLng(pt_end_lat, pt_start_lng),
+                    new GLatLng(pt_end_lat, pt_end_lng),
+                    new GLatLng(pt_start_lat, pt_end_lng),
+                    new GLatLng(pt_start_lat, pt_start_lng)],
+                "#f33f00", 1, 1, "#00FF00", 0);
+
+                boundingBoxes.push(bounding_box);
+                map.addOverlay(bounding_box);
+            }
+
+            //Is Any element of the RoutesArray a subset of the pointsArray?
+            //if (true)
+            //  Returns index of RoutesArray that is subset of the pointsArray
+            //else
+            //  return -1;
+            function IsRoutesArrSubSetPtsArray(routes, pointsArray)
+            {
+                var i =0;
+                var j =0;
+                var count;
+                var flag = false;
+
+                for (i = 0; i < routes.length; i++)
+                {
+                    count = 0;
+                    flag = true;
+
+                    for(j = 0; j < routes[i].length; j++)
+                    {
+                        if (pointsArray.toString().indexOf(routes[i][j].toString()) >=0)
+                        {
+                            count++;
+                        }
+                        else
+                        {
+                            flag = false;
+                        }
+                    }
+
+                    if(flag && (count < pointsArray.length))
+                    {
+                        //subset
+                        return i;
+                    }
+                }
+
+                return -1;
+            }
+
+            function routeInBoundingBox2(routeBoundsObj)
+            {
+                var index;
+                var ptArray;
+                var ptArray2;
+                var start;
+                var end;
+                var i,j, ii, jj;
+
+                for (i = 0; i < loadedAllPointsArray.length ; i++)
+                {
+                    ptArray2 = new Array();
+
+                    for (j = 0; j < loadedAllPointsArray[i].length; j++)
+                    {
+                        start = routeBoundsObj.containsLatLng(loadedAllPointsArray[i][j]);
+
+                        if (j < (loadedAllPointsArray[i].length - 1))
+                        {
+                            end = routeBoundsObj.containsLatLng(loadedAllPointsArray[i][j + 1]);
+
+                            if (start && end)
+                            {
+                                //ptArray2 (Union) point
+                                var val = loadedAllPointsArray[i][j];
+                                if(ptArray2.toString().indexOf(val) < 0)
+                                {
+                                    ptArray2.push(val);
+                                }
+                                //ptArray2 (Union) point
+                                val = loadedAllPointsArray[i][j + 1];
+                                if(ptArray2.toString().indexOf(val) < 0)
+                                {
+                                    ptArray2.push(val);
+                                }
+                            }
+                        }
+                        else if (j == (loadedAllPointsArray[i].length - 1))
+                        {
+                            if (start)
+                            {
+                                var val = loadedAllPointsArray[i][j];
+                                //ptArray2 (Union) point
+                                if(ptArray2.toString().indexOf(val) < 0)
+                                {
+                                    ptArray2.push(val);
+                                }
+                            }
+                        }
+                    }
+
+                    //Determine if all of the points in ptArray2 are in the routesInBB2 array.
+                    //If so then don't add it RoutesInBB2.
+                    //This part of code might be redudant due to IsRoutesArrSubSetPtsArray() later
+                    //Need to verify
+                    var check2;
+                    var inBBFlag2 = false;
+                    for (ii = 0; ii < routesInBB2.length && !inBBFlag2; ii++)
+                    {
+                        check2 = 0;
+                        for (jj = 0; jj < ptArray2.length; jj++)
+                        {
+                            if (ptArray2[jj] == routesInBB2[ii][jj])
+                            {
+                                check2++;
+                            }
+                        }
+
+                        inBBFlag2 = (check2 == ptArray2.length) ? true : false;
+                    }
+
+                    //          if (!inBBFlag2 && (ptArray2.length > 1) && (ptArray2.length == loadedAllPointsArray[i].length))
+                    if (!inBBFlag2 && (ptArray2.length > 1))
+                    {
+                        var index = IsRoutesArrSubSetPtsArray(routesInBB2, ptArray2);
+                        if(index> -1)
+                        {
+                            var v1 = routesInBB2.slice(0, index);
+                            v1.push(ptArray2);
+                            var v2 = routesInBB2.slice(index +1, routesInBB2.length);
+                            routesInBB2 = v1.concat(v2);
+                        }
+                        else
+                        {
+                            routesInBB2.push(ptArray2);
+                        }
+                    }
+                }
+
+                for (i = 0; i < loadedWayPointsArray.length; i++)
+                {
+                    ptArray = new Array();
+
+                    for (j = 0; j < loadedWayPointsArray[i].length; j++)
+                    {
+                        start = routeBoundsObj.containsLatLng(loadedWayPointsArray[i][j]);
+
+                        if (j < (loadedWayPointsArray[i].length - 1))
+                        {
+                            end = routeBoundsObj.containsLatLng(loadedWayPointsArray[i][j + 1]);
+
+                            if (start && end)
+                            {
+                                var val = loadedWayPointsArray[i][j];
+                                //ptArray (Union) point
+                                if(ptArray.toString().indexOf(val) < 0)
+                                {
+                                    ptArray.push(val);
+                                }
+                                val = loadedWayPointsArray[i][j + 1];
+                                //ptArray (Union) point
+                                if(ptArray.toString().indexOf(val) < 0)
+                                {
+                                    ptArray.push(val);
+                                }
+                            }
+                        }
+                        else if (j == (loadedWayPointsArray[i].length - 1))
+                        {
+                            if (start)
+                            {
+                                var val = loadedWayPointsArray[i][j];
+                                //ptArray2 (Union) point
+                                if(ptArray.toString().indexOf(val) < 0)
+                                {
+                                    ptArray.push(val);
+                                }
+                            }
+                        }
+                    }
+
+                    //Determine if all of the points in ptArray are in the routesInBB2 array.
+                    //If so then don't add it RoutesInBB.
+                    //This part of code might be redudant due to IsRoutesArrSubSetPtsArray() later
+                    //********Need to verify
+
+                    var check;
+                    var inBBFlag = false;
+                    for (ii = 0; ii < routesInBB.length && !inBBFlag; ii++)
+                    {
+                        check = 0;
+                        for (jj = 0; jj < ptArray.length; jj++)
+                        {
+                            if (ptArray[jj] == routesInBB[ii][jj])
+                            {
+                                check++;
+                            }
+                        }
+
+                        inBBFlag = (check == ptArray.length) ? true : false;
+                    }
+
+                    //          if (!inBBFlag && (ptArray.length > 1) && (ptArray.length == loadedWayPointsArray[i].length))
+                    if (!inBBFlag && (ptArray.length > 1))
+                    {
+                        var index = IsRoutesArrSubSetPtsArray(routesInBB, ptArray);
+                        if(index> -1)
+                        {
+                            var v1 = routesInBB.slice(0, index);
+                            v1.push(ptArray);
+                            var v2 = routesInBB.slice(index +1, routesInBB.length);
+                            routesInBB = v1.concat(v2);
+                        }
+                        else
+                        {
+                            routesInBB.push(ptArray);
+                        }
+                    }
+                }
+            }
+
+            function routeInBoundingBoxSweep()
+            {
+                doProcess();
+                var intervalDoProcess =  setInterval("doProcess()", 100);
+                var index;
+                var ptArray;
+                var start;
+                var end;
+                var MAX_LAT = 0.125;
+                var MAX_LNG = 0.125;
+
+                var offset = 0;
+                var offsetLat = 0;
+                var offsetLng = 0;
+                var offset_incr_lng = 0.001;
+                var offset_incr_lat = 0.001;
+                /*
+                var cmbCoeff = document.getElementById("cmbExtAlgoCoeff").value;
+                var coeff = 0.4;
+                if(cmbCoeff == 1)
+                {
+                    coeff = 0.6;
+                }
+                else if(cmbCoeff == 2)
+                {
+                    coeff = 0.5;
+                }
+                else if(cmbCoeff == 3)
+                {
+                    coeff = 0.4
+                }
+                else if(cmbCoeff == 4)
+                {
+                    coeff = 0.3;
+                }
+                 */
+
+                var cmbCoeffX = document.getElementById("cmbExtAlgoCoeffX").value;
+                var cmbCoeffY = document.getElementById("cmbExtAlgoCoeffY").value;
+                var coeffX = 0.4;
+                var coeffY = 0.4;
+                if(cmbCoeffX == 1)
+                {
+                    coeffX = 0.6;
+                }
+                else if(cmbCoeffX == 2)
+                {
+                    coeffX = 0.5;
+                }
+                else if(cmbCoeffX == 3)
+                {
+                    coeffX = 0.4
+                }
+                else if(cmbCoeffX == 4)
+                {
+                    coeffX = 0.3;
+                }
+                else if(cmbCoeffX == 5)
+                {
+                    coeffX = 0.2;
+                }
+                else if(cmbCoeffX == 6)
+                {
+                    coeffX = 0.1;
+                }
+                else if(cmbCoeffX == 7)
+                {
+                    coeffX = 0.05;
+                }
+
+
+                if(cmbCoeffY == 1)
+                {
+                    coeffY = 0.6;
+                }
+                else if(cmbCoeffY == 2)
+                {
+                    coeffY = 0.5;
+                }
+                else if(cmbCoeffY == 3)
+                {
+                    coeffY = 0.4
+                }
+                else if(cmbCoeffY == 4)
+                {
+                    coeffY = 0.3;
+                }
+                else if(cmbCoeffY == 5)
+                {
+                    coeffY = 0.2;
+                }
+                else if(cmbCoeffY == 6)
+                {
+                    coeffY = 0.1;
+                }
+                else if(cmbCoeffY == 7)
+                {
+                    coeffY = 0.05;
+                }
+
+
+
+                ClearBoundingBoxes();
+
+                var base_pt = (google_dir.getMarker(0)).getLatLng();  // start point
+                var end_pt = (google_dir.getMarker(google_dir.getNumGeocodes() - 1)).getLatLng();
+
+                //DEC 10, 2009
+                //end_pt = new GLatLng((end_pt.lat() - bb_region), (end_pt.lng() - bb_region));
+
+                //var LAT = Math.abs( Math.abs(base_pt.lat()) - Math.abs(end_pt.lat()) );
+                //var LNG = Math.abs( Math.abs(base_pt.lng()) - Math.abs(end_pt.lng()) );
+                var LAT = base_pt.lat() - end_pt.lat();
+                var LNG = base_pt.lng() - end_pt.lng();
+
+                document.getElementById("txtText").value += "\nLAT = " + LAT + "\n";
+                document.getElementById("txtText").value += "LNG = " + LNG + "\n";
+
+
+                routesInBB = new Array();
+                routesInBB2 = new Array();
+                var sweepBounds = null;
+
+
+                //var startEndDist = base_pt.distanceFrom(end_pt);
+                var startEndDist = longestSegmentDistance;
+                //alert(startEndDist);
+                var distOffsetX = coeffX * (startEndDist/1000);
+                var distOffsetY = coeffY * (startEndDist/1000);
+                //alert("Distoffset: " + distOffset);
+
+                var distBaseNewPoint = 0;
+                var newPoint = null;
+                var iterations = 0;
+                var dummyOffsetIncr =  offset_incr_lng;
+                //offset_incr_lng  = 0;
+                while(distBaseNewPoint < distOffsetX)
+                {
+                    //if(iterations == 200) { break; }
+                    iterations++;
+                    newPoint = new GLatLng(base_pt.lat(), base_pt.lng() - dummyOffsetIncr);
+                    distBaseNewPoint = base_pt.distanceFrom(newPoint) /1000;
+                    dummyOffsetIncr += offset_incr_lng;
+                }
+                offsetLng = dummyOffsetIncr;
+
+                distBaseNewPoint = 0;
+                newPoint = null;
+                //offset_incr_lat = 0;
+                dummyOffsetIncr = offset_incr_lat;
+                iterations = 0;
+                while(distBaseNewPoint < distOffsetY)
+                {
+
+                    //if(iterations == 200) { break; }
+                    iterations++;
+                    newPoint = new GLatLng(base_pt.lat() - dummyOffsetIncr, base_pt.lng());
+                    distBaseNewPoint = base_pt.distanceFrom(newPoint) /1000;
+                    dummyOffsetIncr += offset_incr_lat;
+                }
+                offsetLat = dummyOffsetIncr;
+
+
+                if( (LAT >= 0) && (LNG >= 0) )
+                {
+                    SW_lat = end_pt.lat();
+                    SW_lng = end_pt.lng();
+                    NE_lat = base_pt.lat();
+                    NE_lng = base_pt.lng();
+                }
+                else if( (LAT >= 0) && (LNG < 0) )
+                {
+                    SW_lat = end_pt.lat();
+                    SW_lng = base_pt.lng();
+                    NE_lat = base_pt.lat();
+                    NE_lng = end_pt.lng();
+                }
+                else if( (LAT < 0) && (LNG >= 0) )
+                {
+                    SW_lat = base_pt.lat();
+                    SW_lng = end_pt.lng();
+                    NE_lat = end_pt.lat();
+                    NE_lng = base_pt.lng();
+                }
+                else //if( (LAT < 0) && (LNG < 0) )
+                {
+                    SW_lat = base_pt.lat();
+                    SW_lng = base_pt.lng();
+                    NE_lat = end_pt.lat();
+                    NE_lng = end_pt.lng();
+                }
+
+                SW_lat -= offsetLat;
+                SW_lng -= offsetLng;
+                NE_lat += offsetLat;
+                NE_lng += offsetLng;
+
+                //Dec 10,2009
+                drawBoundingBox2(SW_lat, SW_lng, NE_lat, NE_lng);
+                //drawBoundingBox2((base_pt.lat() - offset/2), (base_pt.lng() - offset), (base_pt.lat() + offset/2), (base_pt.lng() + offset));
+                //drawBoundingBox2(SW_lat, SW_lng, NE_lat, NE_lng);
+
+                if(document.getElementById("chkShowSReg").checked)
+                {
+
+                    clearInterval(intervalDoProcess);
+                    endProcess();
+                    return;
+                }
+
+                //Dec 10,2009 (Code Moved from up to here)
+                sweepBounds = new GLatLngBounds(new GLatLng(SW_lat, SW_lng), new GLatLng(NE_lat, NE_lng));
+                routeInBoundingBox2(sweepBounds);
+
+
+                vertices = formPointsArray();
+
+                if(vertices.length > MAX_NODES)
+                {
+                    if(END_NODES_WITHOUT_LAST > MAX_NODES -1)
+                    {
+                        END_NODES_WITHOUT_LAST = 0;
+                    }
+                    var v1 = vertices.slice(0, MAX_NODES - END_NODES_WITHOUT_LAST - 1);
+                    var v2 = vertices[vertices.length - 1];
+                    var v3 = vertices.slice(vertices.length - END_NODES_WITHOUT_LAST -1, vertices.length -1);
+                    var v4 = v1.concat(v3);
+                    vertices = v4.concat(v2);
+                }
+
+                endProcess();
+                formDirectedGraph2(vertices);
+
+                clearInterval(intervalDoProcess);
+                endProcess();
+            }
+
+            function formWaypointsArray()
+            {
+                var waypointArr = new Array();
+                var k = 0;
+
+                waypointArr[k++] = (google_dir.getMarker(0)).getLatLng();  // start point
+                for (var i = 0; i < routesInBB.length; i++)
+                {
+                    for (j = 0; j < routesInBB[i].length; j++)
+                    {
+                        waypointArr[k++] = routesInBB[i][j];
+                    }
+                }
+                waypointArr[k] = (google_dir.getMarker(google_dir.getNumGeocodes() - 1)).getLatLng();  // end point
+
+                return waypointArr;
+            }
+
+            function formPointsArray()
+            {
+                var pointsArr = new Array();
+                var i, j, k = 0;
+
+                pointsArr.push((google_dir.getMarker(0)).getLatLng());  // push: start point
+
+                //Form Way Points (directions) Array
+                for (i = 0; i < routesInBB.length; i++)
+                {
+                    for (j = 0; j < routesInBB[i].length; j++)
+                    {
+                        pointsArr.push(routesInBB[i][j]);
+                    }
+                }
+
+                //Form All Points (polyline) Array
+                for (i = 0; i < routesInBB2.length; i++)
+                {
+                    for (j = 0; j < routesInBB2[i].length; j++)
+                    {
+                        pointsArr.push(routesInBB2[i][j]);
+                    }
+                }
+
+                pointsArr.push((google_dir.getMarker(google_dir.getNumGeocodes() - 1)).getLatLng());  // push: end point
+
+                return pointsArr;
+            }
+
+            function isABikeRouteDirectionOldVersion(pt1, pt2)
+            {
+                var pt1InBB = false;
+                var pt2InBB = false;
+
+                for (var i = 0; i < routesInBB.length; i++)
+                {
+                    pt1InBB = false;
+                    pt2InBB = false;
+
+                    for (var j = 0; j < routesInBB[i].length; j++)
+                    {
+                        if (pt1 == routesInBB[i][j])
+                        {
+                            pt1InBB = true;
+                        }
+                        if (pt2 == routesInBB[i][j])
+                        {
+                            pt2InBB = true;
+                        }
+
+                        if (pt1InBB && pt2InBB)
+                        {
+                            return 1;
+                        }
+                    }
+                }
+
+                return 0;
+            }
+
+            function isABikeRouteDirection(pt1, pt2)
+            {
+                var pt1InBB = false;
+                var pt2InBB = false;
+                var pts;
+
+                for (var i = 0; i < routesInBB.length; i++)
+                {
+                    pt1InBB = false;
+                    pt2InBB = false;
+                    pts = new Array();
+
+                    for (var j = 0; j < routesInBB[i].length; j++)
+                    {
+                        if (pt1 == routesInBB[i][j])
+                        {
+                            pt1InBB = true;
+                        }
+                        if (pt2 == routesInBB[i][j])
+                        {
+                            pt2InBB = true;
+                        }
+
+                        if(pt1InBB || pt2InBB)
+                        {
+                            pts.push(routesInBB[i][j]);
+                        }
+
+                        if (pt1InBB && pt2InBB)
+                        {
+                            if(pts.length > 2)
+                            {
+                                return 2;
+                                /*
+                     var testPts = new Array();
+                     testPts.push(pt1);
+                     testPts.push(pt2);
+
+                     var len1 = ReturnGDistance(testPts);
+                     var len2 = ReturnGDistance(pts);
+
+                     var diff = len1 - len2;
+                     if(diff < 0) { diff = diff * -1; };
+
+                     if(diff > 10)
+                     {
+                       return 0;
+                     }
+                                 */
+                                /*
+
+                     var poly = new GPolyline(testPts);
+                     var len1 = poly.getLength();
+
+                     poly = new GPolyline(pts);
+                     var len2 = poly.getLength();
+                     var diff = len1 - len2;
+
+                     if(diff < 0) { diff = diff * -1; };
+                     var check = (len1/10) + (len2/10);
+
+                     if(diff > check)
+                     {
+                        return 0;
+                     }
+                                 */
+                            }
+                            return 1;
+                        }
+                    }
+                }
+
+                return 0;
+            }
+
+            function BikeRouteDirectionPts(pt1, pt2)
+            {
+                var pt1InBB = false;
+                var pt2InBB = false;
+                var pts;
+
+                for (var i = 0; i < routesInBB.length; i++)
+                {
+                    pt1InBB = false;
+                    pt2InBB = false;
+                    pts = new Array();
+
+                    for (var j = 0; j < routesInBB[i].length; j++)
+                    {
+                        if (pt1 == routesInBB[i][j])
+                        {
+                            pt1InBB = true;
+                        }
+                        if (pt2 == routesInBB[i][j])
+                        {
+                            pt2InBB = true;
+                        }
+
+                        if(pt1InBB || pt2InBB)
+                        {
+                            pts.push(routesInBB[i][j]);
+                        }
+
+                        if (pt1InBB && pt2InBB)
+                        {
+                            return pts;
+                        }
+                    }
+                }
+
+                return pts;
+            }
+
+            /*
+      function isABikeRoutePolyline(pt1, pt2)
+      {
+         var pt1InBB2 = false;
+         var pt2InBB2 = false;
+         var pts;
+
+         for (var i = 0; i < routesInBB2.length; i++)
+         {
+            pt1InBB2 = false;
+            pt2InBB2 = false;
+            pts = new Array();
+
+            for (var j = 0; j < routesInBB2[i].length; j++)
+            {
+               if (pt1 == routesInBB2[i][j])
+               {
+                  pt1InBB2 = true;
+               }
+               if (pt2 == routesInBB2[i][j])
+               {
+                  pt2InBB2 = true;
+               }
+
+               if(pt1InBB2 || pt2InBB2)
+               {
+                  pts.push(routesInBB2[i][j]);
+               }
+
+               if (pt1InBB2 && pt2InBB2)
+               {
+                  var testPts = new Array();
+                  testPts.push(pt1, pt2);
+                  var poly = new GPolyline(testPts);
+                  var len1 = poly.getLength();
+
+                  poly = new GPolyline(pts);
+                  var len2 = poly.getLength();
+                  var diff = len1 - len2;
+
+                  if(diff < 0) { diff = diff * -1; };
+
+                  if(diff > 5)
+                  {
+                     return 0;
+                  }
+                  return 1;
+               }
+            }
+         }
+
+         return 0;
+      }
+             */
+
+            function isABikeRoutePolyline(pt1, pt2)
+            {
+                var pt1Idx = ptVertex[pt1];
+                var pt2Idx = ptVertex[pt2];
+                var eIdx = edgeIdx[pt1Idx][pt2Idx];
+
+                if((pt1Idx == undefined) || (pt2Idx == undefined))
+                {
+                    return 0;
+                }
+
+                if(eIdx == undefined)
+                {
+                    return 0;
+                }
+
+                if((edges[eIdx][6] == FREE) && (edges[eIdx][2] == 1))
+                {
+                    return 1;
+                }
+                else
+                {
+                    return 0;
+                }
+            }
+
+            function fillEdgeArrayFromRoutesInBB(flag)
+            {
+                doProcess();
+                var curPt,nextPt;
+                var curIdx, nextIdx;
+                var eIdx;
+                var weight;
+
+                for (var i = 0; i < routesInBB2.length; i++)
+                {
+                    for (var j = 0; j < routesInBB2[i].length-1; j++)
+                    {
+                        curPt = routesInBB2[i][j];
+                        nextPt = routesInBB2[i][j+1];
+                        curIdx = ptVertex[curPt];
+                        nextIdx = ptVertex[nextPt];
+
+                        if((curIdx == undefined) || (nextIdx == undefined))
+                        {
+                            continue;
+                        }
+                        eIdx = edgeIdx[curIdx][nextIdx];
+                        if(eIdx == undefined)
+                        {
+                            continue;
+                        }
+                        edges[eIdx][6] = FREE;
+                        edges[eIdx][2] = 1;  //is a bikeroute
+                        weight = getWeight(edges[eIdx][0], edges[eIdx][1]);
+                        edges[eIdx][3] = weight;
+
+                        eIdx = edgeIdx[nextIdx][curIdx];
+                        edges[eIdx][6] = FREE;
+                        edges[eIdx][2] = 1;  //is a bikeroute
+                        edges[eIdx][3] = weight;
+                    }
+                }
+
+                endProcess();
+                if(flag)
+                {
+                    setTimeout("getDistances3()", 0);
+                }
+            }
+
+
+            function getWeight(pt1, pt2)
+            {
+                var pt1Flag = false;
+                var pt2Flag = false;
+
+                for (var i = 0; i < weightedRoutes.length; i++)
+                {
+                    pt1Flag = false;
+                    pt2Flag = false;
+
+                    for (var j = 0; j < weightedRoutes[i].length; j++)
+                    {
+                        if (pt1 == weightedRoutes[i][j])
+                        {
+                            pt1Flag = true;
+                        }
+                        if (pt2 == weightedRoutes[i][j])
+                        {
+                            pt2Flag = true;
+                        }
+
+                        if (pt1Flag && pt2Flag)
+                        {
+                            return route_weights[i];
+                        }
+                    }
+                }
+
+                return 0;
+            }
+
+            /*
+      //testing ...assume weight = 1
+      function getWeight(pt1, pt2)
+      {
+         return 1;
+      }
+             */
+
+            function getDistances1()
+            {
+                doProcess();
+
+                if (chunkNode < edges.length)
+                {
+                    var wayptArr = new Array();
+                    wayptArr.push(edges[chunkNode][0]);
+                    wayptArr.push(edges[chunkNode][1]);
+                    var weight = edges[chunkNode][3];
+                    var routeGD = new GDirections(map);
+
+                    GEvent.addListener(routeGD, "load",
+                    function()
+                    {
+                        var dist = routeGD.getDistance().meters;
+                        edges[chunkNode][4] = dist;
+                        //alert(edges[chunkNode][4]);
+                        edges[chunkNode][5] = Math.round(dist * weight)/1000;
+                        //              edges[chunkNode][5] = Math.round(dist * weight);
+                        //alert(edges[chunkNode][5]);
+
+                        chunkNode++;
+                        //May23: Change
+                        setTimeout("getDistances1()", 500);
+                    }
+                );
+
+                    GEvent.addListener(routeGD, "error",
+                    function()
+                    {
+                        alert("routeGD load error status: " + routeGD.getStatus().code + " chunkNode: " + chunkNode);
+                    }
+                );
+
+                    routeGD.loadFromWaypoints(wayptArr, { getSteps:false, getPolyline:false, preserveViewport:true });
+                }
+                else
+                {
+                    endProcess();
+                    bestPath();
+
+                    CreateGraph();
+                    ExecuteAlgorithm();
+                }
+            }
+
+            function ExecuteAlgorithm()
+            {
+                if(getAlgorithmId() == ID_DIJKSTRA)
+                {
+                    Dijkstra();
+                }
+                else if(getAlgorithmId() == ID_ASTAR)
+                {
+                    AStar();
+                }
+                else if(getAlgorithmId() == ID_NPASA)
+                {
+                    NPASA();
+                }
+                else
+                {
+                    //default
+                    Dijkstra();
+                }
+            }
+
+            function getAlgorithmId()
+            {
+                return document.getElementById("cmbAlgorithm").value;
+            }
+
+            function getDistances3()
+            {
+                doProcess();
+                var i =0;
+
+                //TODO: probably can replace the use of chunkNode in this loop
+                for(i=0; i<edges.length; i++)
+                {
+                    var ptArr = new Array();
+                    ptArr.push(edges[chunkNode][0]);
+                    ptArr.push(edges[chunkNode][1]);
+
+                    var weight = edges[chunkNode][3];
+                    var type = edges[chunkNode][6];
+
+                    if(type == FREE)
+                    {
+                        //Drawing polyine is not required. Just check distance.
+                        var dist = ptArr[0].distanceFrom(ptArr[1]);
+                        //var dist = getNewDistance(ptArr[0], ptArr[1]);
+                        edges[chunkNode][4] = dist;
+                        edges[chunkNode][5] = Math.round(dist * weight)/1000;
+                        chunkNode++;
+                    }
+                }
+                endProcess();
+                chunkNode = i;
+
+                //bestPath();
+                CreateGraph();
+
+                ExecuteAlgorithm();
+            }
+
+            function getDistances2()
+            {
+                var i =0;
+                //TODO: probably can replace the use of chunkNode in this loop
+                for(i=0; i<edges.length; i++)
+                {
+                    var ptArr = new Array();
+                    ptArr.push(edges[chunkNode][0]);
+                    ptArr.push(edges[chunkNode][1]);
+
+                    var weight = edges[chunkNode][3];
+                    var type = edges[chunkNode][6];
+
+
+                    if(type == SNAP)
+                    {
+                        var routeGD = new GDirections(map);
+
+                        GEvent.addListener(routeGD, "load",
+                        function(direction1)
+                        {
+                            var dist = direction1.getDistance().meters;
+                            edges[chunkNode][4] = dist;
+                            //alert(edges[chunkNode][4]);
+                            edges[chunkNode][5] = Math.round(dist * weight)/1000;
+                            //                edges[chunkNode][5] = Math.round(dist * weight);
+                            //alert(edges[chunkNode][5]);
+
+                            if(isABikeRouteDirection(edges[chunkNode][0], edges[chunkNode][1])== 2)
+                            {
+                                pts = BikeRouteDirectionPts(edges[chunkNode][0], edges[chunkNode][1]);
+                                var dir = new GDirections(map);
+
+                                GEvent.addListener(dir, "load",
+                                function(direction2)
+                                {
+                                    var distDir = direction2.getDistance().meters;
+                                    var diff = dist - distDir;
+
+                                    if(diff < 0) { diff = diff * -1; }
+
+                                    if(diff > 10)
+                                    {
+                                        weight = MAXWEIGHT;
+                                        edges[chunkNode][2] = 0;
+                                        edges[chunkNode][3] = weight;
+                                        edges[chunkNode][5] = Math.round(dist * weight)/1000;
+                                    }
+
+                                    chunkNode++;
+                                    setTimeout("getDistances2()", 500);
+                                }
+                            );
+
+                                GEvent.addListener(dir, "error",
+                                function()
+                                {
+                                    alert("dir load error status: " + dir.getStatus().code + " chunkNode: " + chunkNode);
+                                }
+                            );
+
+                                dir.loadFromWaypoints(pts, { getSteps:false, getPolyline:false, preserveViewport:true });
+
+                            }
+                            else
+                            {
+                                chunkNode++;
+                                setTimeout("getDistances2()", 500);
+                            }
+                        }
+                    );
+
+                        GEvent.addListener(routeGD, "error",
+                        function()
+                        {
+                            alert("routeGD load error status: " + routeGD.getStatus().code + " chunkNode: " + chunkNode);
+                        }
+                    );
+
+                        routeGD.loadFromWaypoints(ptArr, { getSteps:false, getPolyline:false, preserveViewport:true });
+                    }
+                    else if(type == FREE)
+                    {
+                        //Drawing polyine is not required. Just check distance.
+                        var dist = ptArr[0].distanceFrom(ptArr[1]);
+                        edges[chunkNode][4] = dist;
+                        edges[chunkNode][5] = Math.round(dist * weight)/1000;
+                        chunkNode++;
+                    }
+                }
+
+                chunkNode = i;
+                endProcess();
+                //bestPath();
+                CreateGraph();
+                ExecuteAlgorithm();
+            }
+
+            function printGraph()
+            {
+                document.getElementById("txtText").value += "\n\n\n \t\t\t\t\t\t\t\t\tDIRECTED GRAPH ";
+                document.getElementById("txtText").value += "\n\nVERTICES: \n\n";
+
+                for (var i = 0; i < vertices.length; i++)
+                {
+                    document.getElementById("txtText").value += vertices[i] + "\n";
+                }
+
+                document.getElementById("txtText").value += "\n\nEDGES: \n";
+
+                for (var i = 0; i < edges.length; i++)
+                {
+                    document.getElementById("txtText").value += "\n " + edges[i][0] + " -> ";
+                    document.getElementById("txtText").value += edges[i][1] + "\t\t\t";
+                    if (edges[i][2] == 1)
+                    {
+                        if(edges[i][6] == SNAP)
+                        {
+                            document.getElementById("txtText").value += "SNAP DRAW BIKE ROUTE";
+                        }
+                        else if(edges[i][6] == FREE)
+                        {
+                            document.getElementById("txtText").value += "FREE DRAW BIKE ROUTE";
+                        }
+                    }
+                    else
+                    {
+                        document.getElementById("txtText").value += "NOT A BIKE ROUTE";
+                    }
+                    document.getElementById("txtText").value += "\t\t\tWEIGHT = " + edges[i][3];
+                    document.getElementById("txtText").value += "\t\t\tDISTANCE = " + edges[i][4];
+                    document.getElementById("txtText").value += "\t\t\tPRODUCT = " + edges[i][5];
+                }
+            }
+
+
+            function bestPath()
+            {
+                printGraph();
+            }
+
+            function DrawFinalRoute(result)
+            {
+                bestDistance = 0;
+                var intervalDoProcess =  setInterval("doProcess()",100);
+                ptsVerify = new Array();
+                ptsVerCounter = 0;
+
+                UpdateBestCost();
+                UpdateDijkExecTime();
+                UpdateNumNodes();
+                UpdateNodesExtracted();
+
+
+                //may9
+                //map.clearOverlays();
+                hideRoutesState = true;
+                //HideDirections();
+                //HidePolylines();
+                btnHideRoutesClick();
+                hideBestPathState = false;
+                btnHideBestPathClick();
+                //document.getElementById("btnHideBestPath").value = "Hide Best Path";
+                ClearBoundingBoxes();
+                ClearBestPath();
+
+                var point1 = result[0];
+                var point2 = result[result.length-1];
+                var routesCounter = result.length - 1;
+
+                markerBestMarkerStr = new greenMarker(point1);
+                map.addOverlay(markerBestMarkerStr);
+                markerBestMarkerEnd = new redMarker(point2);
+                map.addOverlay(markerBestMarkerEnd);
+
+
+                for(i =0; i < result.length -1; i++)
+                {
+                    var pt1 = result[i];
+                    var pt2 = result[i+1];
+                    var pts = new Array();
+                    var isSnap = false;
+                    var isFree = false;
+                    var color = "PURPLE";
+
+                    pts.push(pt1);
+                    pts.push(pt2);
+
+
+                    /*
+            if((isABikeRouteDirection(pt1, pt2)==1) || (isABikeRouteDirection(pt1, pt2) ==2))
+            {
+               isSnap = true;
+               isFree = false;
+            }
+            else*/
+
+                    if(isABikeRoutePolyline(pt1, pt2))
+                    {
+                        isSnap = false;
+                        isFree = true;
+                    }
+
+                    if(!isFree)
+                    {
+                        var dirDiv = document.getElementById("hiddenDIV");
+                        var gdir = new GDirections(map, dirDiv);
+                        bestPathDirs.push(gdir);
+
+                        ptsVerify.push(pt1);
+                        ptsVerify.push(pt2);
+
+                        GEvent.addListener(gdir, "load",
+                        function(dir)
+                        {
+                            var dummyPt1;
+                            var dummyPt2;
+                            var flag = true;
+
+                            var loopCounter = 0;
+                            do
+                            {
+                                if(loopCounter > ptsVerify.length)
+                                {
+                                    return;
+                                }
+                                dummyPt1 = ptsVerify.shift();
+                                dummyPt2 = ptsVerify.shift();
+
+                                flag = LoadFinalRoute(dir, dummyPt1, dummyPt2);
+
+                                //move the points checked already
+                                //to the end to verify later.
+                                if(!flag)
+                                {
+                                    ptsVerify.push(dummyPt1, dummyPt2);
+                                }
+                                loopCounter++;
+                            }while(flag == false)
+
+                            bestDistance += dir.getDistance().meters;
+                        routesCounter--;
+                        document.getElementById("hiddenDIV").innerHTML = '';
+                        if(routesCounter == 0)
+                        {
+                            UpdateBestDistance();
+                            searchEndTime = new Date().getTime();
+                            var searchExecTime = searchEndTime - searchStartTime;
+                            UpdateSearchExecTime(searchExecTime);
+                        }
+
+                    }
+                );
+
+                    GEvent.addListener(gdir, "addoverlay", OnAddOverlayFinalgDir);
+                    gdir.loadFromWaypoints(pts,
+                    { getSteps:true,
+                        getPolyline:true,
+                        preserveViewport:true,
+                        travelMode:G_TRAVEL_MODE_WALKING,
+                        avoidHighways:true
+                    }
+                );
+                }
+                else
+                {
+                    var poly = new GPolyline(pts,color,5,0.7);
+                    bestDistance += poly.getLength();
+                    bestPathPolys.push(poly);
+                    map.addOverlay(poly);
+                    routesCounter--;
+                    if(routesCounter == 0)
+                    {
+                        UpdateBestDistance();
+                        searchEndTime = new Date().getTime();
+                        var searchExecTime = searchEndTime - searchStartTime;
+                        UpdateSearchExecTime(searchExecTime);
+                    }
+                }
+            }
+
+            ClearEdgesVertices();
+
+            clearInterval(intervalDoProcess);
+            endProcess();
+        }
+
+        function UpdateBestDistance()
+        {
+            var bestDistKm = Math.round(Number(bestDistance)) / 1000;
+            document.getElementById("txtBestDist").value = bestDistKm.toString() + " km";
+        }
+
+        function UpdateBestCost()
+        {
+            document.getElementById("txtBestCost").value = bestCost;
+        }
+
+        function UpdateNumNodes()
+        {
+            document.getElementById("txtNumNodes").value = finalNumNodes;
+        }
+
+        function UpdateDijkExecTime()
+        {
+            document.getElementById("txtDijkTime").value = (dijkExecTime) + " ms";
+        }
+
+        function UpdateSearchExecTime(searchExecTime)
+        {
+            document.getElementById("txtSearchTime").value = (searchExecTime) + " ms";
+        }
+
+        function UpdateNodesExtracted()
+        {
+            document.getElementById("txtNodesExtracted").value = nodesExtractedCount;
+        }
+
+        function LoadFinalRoute(gdir, pt1, pt2)
+        {
+            var dirPoly = gdir.getPolyline();
+            var deltaDistance = 30;
+            dirPoly.color = "PURPLE";
+            dirPoly.opacity = 0.7;
+
+            var polyPt1 = dirPoly.getVertex(0);
+            if(!polyPt1.equals(pt1))
+            {
+                var pts1 = new Array();
+                pts1.push(polyPt1);
+                pts1.push(pt1);
+                var polyline1 = new GPolyline(pts1);
+                polyline1.color = "PURPLE";
+                polyline1.opacity = 0.7;
+
+
+                if(polyline1.getLength() > deltaDistance)
+                {
+                    return false;
+                }
+                else
+                {
+                    bestPathPolys.push(polyline1);
+                    bestDistance += polyline1.getLength();
+                    map.addOverlay(polyline1);
+                }
+            }
+
+            var polyPt2 = dirPoly.getVertex(dirPoly.getVertexCount() -1);
+
+            if(!polyPt2.equals(pt2))
+            {
+                var pts2 = new Array();
+                pts2.push(polyPt2);
+                pts2.push(pt2);
+                var polyline2 = new GPolyline(pts2);
+                polyline2.color = "PURPLE";
+                polyline2.opacity = 0.7;
+
+                if(polyline2.getLength() > deltaDistance)
+                {
+                    return false;
+                }
+                else
+                {
+                    bestPathPolys.push(polyline2);
+                    bestDistance +=polyline2.getLength();
+                    map.addOverlay(polyline2);
+                }
+            }
+
+            return true;
+        }
+
+        //////////////////////////////////////START - DIJKSTRA///////////////////////////////////////////
+        //Note: The Q <- queue and the pi <- predecessors are global variables
+        function Dijkstra()
+        {
+            nodesExtractedCount = 0;
+            var startTime = new Date().getTime();
+            finalNumNodes = vertices.length;
+            var destinationIndex = vertices.length -1;
+            var startIndex = 0;
+            doProcess();
+            //ProcessDijkstra();
+
+            //distance array
+            var d = new Array(vertices.length);
+            //predecessor array
+            pi = new Array(vertices.length);
+            //settled array
+            var S = new Array(vertices.length);
+            var i =0;
+
+            d[startIndex] = 0;
+
+            for(var i =0; i< S.length; i++)
+            {
+                S[i] = false;
+            }
+            for(i =0; i < pi.length; i++)
+            {
+                pi[i] = -1;
+            }
+            //Set infinite distances for all except source
+            //vertices[0] is source
+            for(i=1; i < d.length; i++)
+            {
+                d[i] = INFINITY;
+            }
+
+            Q = new Array();
+            if(preInsertToQ)
+            {
+                for(i=0;i<vertices.length; i++)
+                {
+                    Q.push(i);
+                }
+            }
+            else
+            {
+                Q.push(startIndex);
+            }
+
+            var endLoop = false;
+            while((Q.length > 0) && (!endLoop))
+            {
+                var u = ExtractMinimum(d);
+                S[u] = true;
+
+                nodesExtractedCount++;
+
+                //we are at the destination so break out
+                if(u == (destinationIndex))
+                {
+                    endLoop = true;
+                }
+                else
+                {
+                    RelaxNeighbours(u,d,S.slice());
+                }
+            }
+
+            var endTime = new Date().getTime();
+
+            var strRoute = PrintRoute2(0, vertices.length -1, pi.slice());
+            var result =new Array();
+
+            for(i =0; i< strRoute.length; i++)
+            {
+                var verIndex = strRoute[i];
+                var vertex = vertices[verIndex];
+                result.push(vertex);
+            }
+
+            bestCost = Math.round(d[vertices.length-1] * 100)/100;
+            dijkExecTime = endTime - startTime;
+
+            DrawFinalRoute(result);
+            endProcess();
+
+        }
+
+        function ExecuteServerDijkstra()
+        {
+            //alert(vertices[0]);
+
+            var st = trim(document.getElementById("txtText").value);
+            var strRoute = new Array();
+            strRoute = st.split(",");
+            //alert(strRoute);
+            // alert(strRoute.length);
+            var result = new Array();
+            for(i =0; i< strRoute.length; i++)
+            {
+                var verIndex = strRoute[i];
+                //alert("verIndex:" + verIndex);
+                var vertex = vertices[verIndex];
+                result.push(vertex);
+            }
+
+            //alert(result);
+            DrawFinalRoute(result);
+        }
+
+        function ExtractMinimum(d)
+        {
+            //find minimum
+            var minimumIdx = Q[0];
+            for(var i =0; i < Q.length; i++)
+            {
+                var idx = Q[i];
+                if(d[minimumIdx] > d[idx])
+                {
+                    minimumIdx = idx;
+                }
+            }
+
+            //extract minimum
+            var newQ = new Array();
+            for(i =0; i< Q.length;i++)
+            {
+                if(Q[i] != minimumIdx)
+                {
+                    newQ.push(Q[i]);
+                }
+            }
+            Q = newQ;
+
+            //     Q = Q.slice(0, minimumIdx -1).concat(Q.slice(minimumIdx));
+
+            return minimumIdx;
+        }
+
+        function RelaxNeighbours(u,d,S)
+        {
+            /*
+                for(var i =1; i< vertices.length; i++)
+                {
+             */
+            var i;
+            var aaa;
+            var curSuccessors = successors[u];
+            for(aaa =0; aaa< successors[u].length; aaa++)
+            {
+                i = curSuccessors[aaa];
+
+                // the vertices[i] is a neighbour of vertices[u] if dGraph[u][i] > 0
+                if((S[i] == false) && (dGraph[u][i] > 0))
+                {
+                    var distSum = d[u] + dGraph[u][i];
+
+                    if(!preInsertToQ)
+                    {
+                        InsertToQ(i);
+                    }
+
+                    if(d[i] > distSum)
+                    {
+                        d[i] = distSum;
+                        pi[i] = u;
+                    }
+                }
+            }
+        }
+
+        function InsertToQ(val)
+        {
+            var i = 0;
+            var found = false;
+            for(i = 0; (i< Q.length) && !found; i++)
+            {
+                if(Q[i] == val)
+                {
+                    found = true;
+                }
+            }
+            if(!found)
+            {
+                Q.push(val);
+            }
+        }
+        //////////////////////////////////////END - DIJKSTRA//////////////////////////////////////////
+
+        //////////////////////////////////////START - ASTAR///////////////////////////////////////////
+        //Note: The Q <- queue and the pi <- predecessors are global variables
+        function AStar()
+        {
+            nodesExtractedCount = 0;
+            var startTime = new Date().getTime();
+
+            var destinationIndex = vertices.length -1;
+            var startIndex = 0;
+            finalNumNodes = vertices.length;
+            doProcess();
+            //ProcessDijkstra();
+
+            //distance array
+            var d = new Array(vertices.length);
+            var func_h = new Array(vertices.length);
+            var h_func = new Array(vertices.length);
+
+            //predecessor array
+            pi = new Array(vertices.length);
+            //settled array
+            var S = new Array(vertices.length);
+            var i =0;
+
+            d[startIndex] = 0;
+            h_func[startIndex] = dGraph[startIndex][destinationIndex];
+            func_h[startIndex] = h_func[startIndex];
+
+            for(var i =0; i< S.length; i++)
+            {
+                S[i] = false;
+            }
+            for(i =0; i < pi.length; i++)
+            {
+                pi[i] = -1;
+            }
+            //Set infinite distances for all except source
+            //vertices[0] is source
+            for(i=1; i < d.length; i++)
+            {
+                d[i] = INFINITY;
+                func_h[i]= INFINITY;
+                //h_func[i] = dGraph[i][vertices.length-1]/5;
+                var eIdx = edgeIdx[i][destinationIndex];
+                var weight = edges[eIdx][3];
+                h_func[i] = dGraph[i][destinationIndex]/weight;
+            }
+            Q = new Array();
+
+
+            if(preInsertToQ)
+            {
+                for(i=0;i<vertices.length; i++)
+                {
+                    Q.push(i);
+                }
+            }
+            else
+            {
+                Q.push(startIndex);
+            }
+
+            var endLoop = false;
+            while((Q.length > 0) && (!endLoop))
+            {
+                var u = ExtractMinimumAStar(d, func_h, h_func);
+                S[u] = true;
+
+                nodesExtractedCount++;
+                //we are at the destination so break out
+                if(u == (destinationIndex))
+                {
+                    endLoop = true;
+                }
+
+                ClearEdgesVertices();
+
+                clearInterval(intervalDoProcess);
+                endProcess();
+            }
+
+            function UpdateBestDistance()
+            {
+                var bestDistKm = Math.round(Number(bestDistance)) / 1000;
+                document.getElementById("txtBestDist").value = bestDistKm.toString() + " km";
+            }
+
+            function UpdateBestCost()
+            {
+                document.getElementById("txtBestCost").value = bestCost;
+            }
+
+            function UpdateNumNodes()
+            {
+                document.getElementById("txtNumNodes").value = finalNumNodes;
+            }
+
+            function UpdateDijkExecTime()
+            {
+                document.getElementById("txtDijkTime").value = (dijkExecTime) + " ms";
+            }
+
+            function UpdateSearchExecTime(searchExecTime)
+            {
+                document.getElementById("txtSearchTime").value = (searchExecTime) + " ms";
+            }
+
+
+            function LoadFinalRoute(gdir, pt1, pt2)
+            {
+                var dirPoly = gdir.getPolyline();
+                dirPoly.color = "PURPLE";
+                dirPoly.opacity = 0.7;
+
+                var polyPt1 = dirPoly.getVertex(0);
+                if(!polyPt1.equals(pt1))
+                {
+                    var pts1 = new Array();
+                    pts1.push(polyPt1);
+                    pts1.push(pt1);
+                    var polyline1 = new GPolyline(pts1);
+                    polyline1.color = "PURPLE";
+                    polyline1.opacity = 0.7;
+                    bestPathPolys.push(polyline1);
+                    bestDistance += polyline1.getLength();
+                    map.addOverlay(polyline1);
+                }
+
+                var polyPt2 = dirPoly.getVertex(dirPoly.getVertexCount() -1);
+
+                if(!polyPt2.equals(pt2))
+                {
+                    var pts2 = new Array();
+                    pts2.push(polyPt2);
+                    pts2.push(pt2);
+                    var polyline2 = new GPolyline(pts2);
+                    polyline2.color = "PURPLE";
+                    polyline2.opacity = 0.7;
+                    bestPathPolys.push(polyline2);
+                    bestDistance +=polyline2.getLength();
+                    map.addOverlay(polyline2);
+                }
+            }
+
+            //Note: The Q <- queue and the pi <- predecessors are global variables
+            function Dijkstra()
+            {
+                var startTime = new Date().getTime();
+                finalNumNodes = vertices.length;
+                doProcess();
+                //ProcessDijkstra();
+
+                //distance array
+                var d = new Array(vertices.length);
+                //predecessor array
+                pi = new Array(vertices.length);
+                //settled array
+                var S = new Array(vertices.length);
+                var i =0;
+
+                d[0] = 0;
+
+                for(var i =0; i< S.length; i++)
+                {
+                    S[i] = false;
+                }
+                for(i =0; i < pi.length; i++)
+                {
+                    pi[i] = -1;
+                }
+                //Set infinite distances for all except source
+                //vertices[0] is source
+                for(i=1; i < d.length; i++)
+                {
+                    d[i] = 999999999;
+                }
+
+                Q.push(0);
+
+                var endLoop = false;
+                while((Q.length > 0) && (!endLoop))
+                {
+                    var u = ExtractMinimum(d);
+                    S[u] = true;
+                    RelaxNeighbours(u,d,S.slice());
+
+                    //we are at the destination so break out
+                    if(u == (vertices.length -1))
+                    {
+                        endLoop = true;
+                    }
+                }
+
+                var endTime = new Date().getTime();
+
+                var strRoute = PrintRoute2(0, vertices.length -1, pi.slice());
+                var result =new Array();
+
+                for(i =0; i< strRoute.length; i++)
+                {
+                    var verIndex = strRoute[i];
+                    var vertex = vertices[verIndex];
+                    result.push(vertex);
+                }
+
+                bestCost = Math.round(d[vertices.length-1] * 100)/100;
+                dijkExecTime = endTime - startTime;
+
+                DrawFinalRoute(result);
+                endProcess();
+
+            }
+
+            function ExecuteServerDijkstra()
+            {
+                //alert(vertices[0]);
+
+                var st = trim(document.getElementById("txtText").value);
+                var strRoute = new Array();
+                strRoute = st.split(",");
+                //alert(strRoute);
+                // alert(strRoute.length);
+                var result = new Array();
+                for(i =0; i< strRoute.length; i++)
+                {
+                    var verIndex = strRoute[i];
+                    //alert("verIndex:" + verIndex);
+                    var vertex = vertices[verIndex];
+                    result.push(vertex);
+                }
+
+                //alert(result);
+                DrawFinalRoute(result);
+            }
+
+            function ExtractMinimum(d)
+            {
+                //find minimum
+                var minimumIdx = Q[0];
+                for(var i =0; i < Q.length; i++)
+                {
+                    var idx = Q[i];
+                    if(d[minimumIdx] > d[idx])
+                    {
+                        minimumIdx = idx;
+                    }
+                }
+
+                //extract minimum
+                var newQ = new Array();
+                for(i =0; i< Q.length;i++)
+                {
+                    if(Q[i] != minimumIdx)
+                    {
+                        newQ.push(Q[i]);
+                    }
+                }
+                Q = newQ;
+
+                //     Q = Q.slice(0, minimumIdx -1).concat(Q.slice(minimumIdx));
+
+                return minimumIdx;
+            }
+
+            function RelaxNeighbours(u,d,S)
+            {
+                for(var i =1; i< vertices.length; i++)
+                {
+                    // the vertices[i] is a neighbour of vertices[u] if dGraph[u][i] > 0
+                    if((S[i] == false) && (dGraph[u][i] > 0))
+                    {
+                        var distSum = d[u] + dGraph[u][i];
+
+                        if(d[i] > distSum)
+                        {
+                            d[i] = distSum;
+                            pi[i] = u;
+                            InsertToQ(i);
+                        }
+                    }
+                }
+            }
+
+            function InsertToQ(val)
+            {
+                var i = 0;
+                var found = false;
+                for(i = 0; (i< Q.length) && !found; i++)
+                {
+                    if(Q[i] == val)
+                    {
+                        found = true;
+                    }
+                }
+                if(!found)
+                {
+                    Q.push(val);
+                }
+            }
+
+            var dGraph;
+            function CreateGraph()
+            {
+                doProcess();
+                dGraph = new Array(vertices.length);
+
+                for(var i =0; i< vertices.length; i++)
+                {
+                    dGraph[i] = new Array(vertices.length);
+                    for(var j =0; j< vertices.length; j++)
+                    {
+                        if(i==j)
+                        {
+                            dGraph[i][j] = 0;
+                        }
+                        else
+                        {
+                            dGraph[i][j] = FindDistance(i,j);
+                        }
+                    }
+                }
+                endProcess();
+            }
+
+            function PrintRoute(start, end, pi)
+            {
+                var str;
+
+                if(start ==end)
+                {
+                    str = start;
+                }
+                else if(end == -1)
+                {
+                    str = "";
+                }
+                else
+                {
+                    RelaxNeighboursAStar(u,d,func_h, h_func, S.slice());
+                }
+            }
+
+            var endTime = new Date().getTime();
+
+            var strRoute = PrintRoute2(0, vertices.length -1, pi.slice());
+            var result =new Array();
+
+            for(i =0; i< strRoute.length; i++)
+            {
+                var verIndex = strRoute[i];
+                var vertex = vertices[verIndex];
+                result.push(vertex);
+            }
+
+            bestCost = Math.round(d[vertices.length-1] * 100)/100;
+            dijkExecTime = endTime - startTime;
+
+            DrawFinalRoute(result);
+            endProcess();
+        }
+
+
+        function ExtractMinimumAStar(d, func_h, h_func)
+        {
+            //find minimum
+            var minimumIdx = Q[0];
+            for(var i =0; i < Q.length; i++)
+            {
+                var idx = Q[i];
+                if(func_h[minimumIdx] > func_h[idx])
+                {
+                    minimumIdx = idx;
+                }
+            }
+
+            //extract minimum
+            var newQ = new Array();
+            for(i =0; i< Q.length;i++)
+            {
+                if(Q[i] != minimumIdx)
+                {
+                    newQ.push(Q[i]);
+                }
+            }
+            Q = newQ;
+
+            //     Q = Q.slice(0, minimumIdx -1).concat(Q.slice(minimumIdx));
+
+            return minimumIdx;
+        }
+
+        var skipped =0;
+        function RelaxNeighboursAStar(u,d,func_h, h_func, S)
+        {
+            //alert("relax node" + u);
+            var i;
+            var aaa;
+            var curSuccessors = successors[u];
+            for(aaa =0; aaa< successors[u].length; aaa++)
+            {
+                i = curSuccessors[aaa];
+
+                // the vertices[i] is a neighbour of vertices[u] if dGraph[u][i] > 0
+                if((S[i] == false) && (dGraph[u][i] > 0))
+                {
+                    var distSum = d[u] + dGraph[u][i];
+                    var funcSum = distSum + h_func[i];
+                    //           alert("node" + i + " distSum: " + distSum + " funcSum: " + funcSum);
+
+                    if(!preInsertToQ)
+                    {
+                        InsertToQ(i);
+                    }
+
+                    if(d[i]> distSum)
+                    {
+                        d[i] = distSum;
+                        func_h[i] = funcSum;
+                        pi[i] = u;
+                    }
+                }
+            }
+        }
+        //////////////////////////////////////END - ASTAR///////////////////////////////////////////
+
+
+        //////////////////////////////////////START- NPASA///////////////////////////////////////////
+        function NPASA()
+        {
+            alert("This is not supported");
+        }
+        //////////////////////////////////////END - NPASA///////////////////////////////////////////
+
+        var dGraph;
+        function CreateGraph()
+        {
+            doProcess();
+            dGraph = new Array(vertices.length);
+
+            for(var i =0; i< vertices.length; i++)
+            {
+                dGraph[i] = new Array(vertices.length);
+                for(var j =0; j< vertices.length; j++)
+                {
+                    if(i==j)
+                    {
+                        dGraph[i][j] = 0;
+                    }
+                    else
+                    {
+                        dGraph[i][j] = FindDistance(i,j);
+                    }
+                }
+            }
+
+            var isDirectedChecked = document.getElementById("chkDirectedGraph").checked;
+            if(isDirectedChecked  || (getAlgorithmId() == ID_NPASA))
+            {
+                if(getAlgorithmId() == ID_NPASA)
+                {
+                    generateDirectedGraphNew(0, vertices.length -1, true);
+                }
+                else
+                {
+                    generateDirectedGraphNew(0, vertices.length -1, false);
+                }
+                findSuccessors();
+                findPredecessors();
+            }
+            else
+            {
+                findSuccessors();
+                findPredecessors();
+            }
+            preInsertToQ = document.getElementById("chkPreInsertQ").checked;
+
+            endProcess();
+        }
+
+        function findSuccessors()
+        {
+            successors = new Array(vertices.length);
+            var i=0;
+            var j=0;
+            var numNodes = vertices.length;
+            //var succLen = new Array();
+            for (i = 0; i < numNodes; i++) {
+                successors[i] = new Array();
+                for (j = 0; j < numNodes; j++) {
+                    if (i == j) {
+                        continue;
+                    }
+                    //if((dGraph[i][j] != INFINITY) && (dGraph[i][j] != 0)) {
+                    if((dGraph[i][j] != INFINITY)) {
+                        successors[i].push(j);
+                    }
+                }
+                //succLen.push(successors[i].length);
+            }
+        }
+
+        function findPredecessors()
+        {
+            predecessors = new Array(vertices.length);
+            var i=0;
+            var j=0;
+            var numNodes = vertices.length;
+            //var predLen = new Array();
+            for (i = 0; i < numNodes; i++) {
+                predecessors[i] = new Array();
+                for (j = 0; j < numNodes; j++) {
+                    if (i == j) {
+                        continue;
+                    }
+                    //if((dGraph[j][i] != INFINITY) && (dGraph[j][i] != 0))
+                    if((dGraph[j][i] != INFINITY))
+                    {
+                        predecessors[i].push(j);
+                    }
+                }
+                //predLen.push(predecessors[i].length);
+            }
+        }
+
+
+        //descending now
+        function sortEstimatedDistancesDesc(a, b)
+        {
+            if(a[0] < b[0])
+            {
+                return 1;
+            }
+            else if(a[0] > b[0])
+            {
+                return -1;
+            }
+            else
+            {
+                return 0;
+            }
+
+        }
+
+        //ascending
+        function sortEstimatedDistancesAsc(a, b)
+        {
+            if(a[0] < b[0])
+            {
+                return -1;
+            }
+            else if(a[0] > b[0])
+            {
+                return 1;
+            }
+            else
+            {
+                return 0;
+            }
+
+        }
+
+        function generateDirectedGraphNew(startIndex, destinationIndex, isNPASA)
+        {
+            var index;
+            var estDest = new Array(vertices.length);
+            var estStart = new Array(vertices.length);
+            var numNodes = vertices.length;
+            var sortedIndicesStart = new Array(vertices.length);
+            var sortedIndicesDest = new Array(vertices.length);
+
+            for(index =0; index< numNodes; index++)
+            {
+                estDest[index] = new Array(2);
+                estDest[index][0] = dGraph[index][destinationIndex];
+                estDest[index][1] = index;
+
+                estStart[index] = new Array(2);
+                estStart[index][0] = dGraph[startIndex][index];
+                estStart[index][1] = index;
+
+            }
+
+            estDest.sort(sortEstimatedDistancesDesc);
+            estStart.sort(sortEstimatedDistancesAsc);
+
+            for (index = 0; index < numNodes; index++) {
+                sortedIndicesStart[index] = estStart[index][1];
+                sortedIndicesDest[index] = estDest[index][1];
+            }
+            formDirectedGraphHelper(sortedIndicesStart, sortedIndicesDest, startIndex, destinationIndex, isNPASA);
+        }
+
+        function formDirectedGraphHelper(sortedIndicesStart, sortedIndicesDest, startIndex, destinationIndex, isNPASA)
+        {
+            var numNodes = vertices.length;
+            var node = startIndex;
+            var indexDestOfNode;
+            var indexDestOfJ;
+            var indexStartOfNode;
+            var indexStartOfJ;
+            var i=0;
+            var j=0;
+            var startDiff;
+            var destDiff;
+            var epsilonDiff = 2;
+
+            if(isNPASA)
+            {
+                epsilonDiff = 0;
+            }
+
+            if(isNPASA)
+            {
+                //NPASA
+                for ( i = 0; i < numNodes; i++) {
+                    node = i;
+                    if ((node == startIndex)) {
+                        continue;
+                    }
+                    for (j = i+1; j < numNodes; j++) {
+                        if ((j == startIndex) ) {
+                            continue;
+                        }
+                        var distanceFromNodeToJ = dGraph[node][j];
+
+                        if(distanceFromNodeToJ == INFINITY)
+                        {
+                            continue;
+                        }
+
+                        indexDestOfNode = sortedIndicesDest.indexOf(node);
+                        indexDestOfJ = sortedIndicesDest.indexOf(j);
+
+                        //indexStartOfNode = sortedIndicesStart.indexOf(node);
+                        //indexStartOfJ = sortedIndicesStart.indexOf(j);
+
+                        //startDiff = indexStartOfNode - indexStartOfJ;
+                        destDiff = indexDestOfNode - indexDestOfJ;
+
+                        if( destDiff < -epsilonDiff ){
+                            dGraph[j][node] = INFINITY;
+                        }
+                        else if( destDiff > epsilonDiff )
+                        {
+                            dGraph[node][j] = INFINITY;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                for ( i = 0; i < numNodes; i++) {
+                    node = i;
+                    if ((node == startIndex)) {
+                        continue;
+                    }
+                    for (j = i+1; j < numNodes; j++) {
+                        if ((j == startIndex) ) {
+                            continue;
+                        }
+                        var distanceFromNodeToJ = dGraph[node][j];
+
+                        if(distanceFromNodeToJ == INFINITY)
+                        {
+                            continue;
+                        }
+
+                        indexDestOfNode = sortedIndicesDest.indexOf(node);
+                        indexDestOfJ = sortedIndicesDest.indexOf(j);
+
+                        indexStartOfNode = sortedIndicesStart.indexOf(node);
+                        indexStartOfJ = sortedIndicesStart.indexOf(j);
+
+                        startDiff = indexStartOfNode - indexStartOfJ;
+                        destDiff = indexDestOfNode - indexDestOfJ;
+
+                        if( (startDiff < -epsilonDiff ) && (destDiff < -epsilonDiff) ){
+                            dGraph[j][node] = INFINITY;
+                        }
+                        else if( (startDiff > epsilonDiff ) && (destDiff > epsilonDiff) )
+                        {
+                            dGraph[node][j] = INFINITY;
+                        }
+                    }
+                }
+            }
+
+            node = startIndex;
+            for (j = 0; j < numNodes; j++) {
+                if (node == j) {
+                    continue;
+                }
+                dGraph[j][node] = INFINITY;
+            }
+        }
+
+
+        function PrintRoute(start, end, pi)
+        {
+            var str;
+
+            if(start ==end)
+            {
+                str = start;
+            }
+            else if(end == -1)
+            {
+                str = "";
+            }
+            else
+            {
+                str = PrintRoute(0, pi[end], pi);
+                str = str + "," + end;
+            }
+
+            return str;
+        }
+
+        function PrintRoute2(start, end, pi)
+        {
+            var strRoute = new Array();
+            if(start ==end)
+            {
+                strRoute.push(start);
+            }
+            else if(end == -1)
+            {
+                return strRoute;
+            }
+            else
+            {
+                strRoute = PrintRoute2(0, pi[end], pi);
+                strRoute.push(end);
+            }
+
+            return strRoute;
+        }
+
+        function FindDistance(idx1, idx2)
+        {
+            if(idx1 == idx2)
+            {
+                return 0;
+            }
+
+            var curPt = vertices[idx1];
+            var nextPt = vertices[idx2];
+            var curIdx = ptVertex[curPt];
+            var nextIdx = ptVertex[nextPt];
+            var eIdx = edgeIdx[curIdx][nextIdx];
+
+
+            return edges[eIdx][5];
+            /*
+
+         for(var i =0; i< edges.length; i++)
+         {
+            if((vertices[idx1] == edges[i][0]) && (vertices[idx2] == edges[i][1]))
+            {
+               return edges[i][5];
+            }
+            else if((vertices[idx2] == edges[i][0]) && (vertices[idx1] == edges[i][1]))
+            {
+               return edges[i][5];
+            }
+         }
+             */
+        }
+
+        function formDirectedGraph1(waypointArr)
+        {
+            edges = new Array();
+            var node;
+            var k = 0;
+            var bikeRoute = -1;
+            var weight = -1;
+
+            for (var i = 0; i < waypointArr.length; i++)
+            {
+                node = waypointArr[i];
+                for (var j = 0; j < waypointArr.length; j++)
+                {
+                    if (node != waypointArr[j])     // to eliminate cyclic routes
+                    {
+                        edges[k] = new Array();
+                        edges[k][0] = node;
+                        edges[k][1] = waypointArr[j];
+
+                        bikeRoute = isABikeRouteDirection(edges[k][0], edges[k][1]);
+                        edges[k][2] = bikeRoute;
+
+                        weight = ((bikeRoute == 1) || (bikeRoute ==2)) ? getWeight(edges[k][0], edges[k][1]) : MAXWEIGHT;
+                        edges[k][3] = weight;
+
+                        edges[k][4] = 0;       // for distance
+                        edges[k][5] = 0;       // for distance and weight product
+
+                        k++
+                    }
+                }
+            }
+
+            //May23: Change
+            chunkNode = 0;
+            getDistances1();
+        }
+
+        function formDirectedGraph2(pointsArr)
+        {
+            doProcess();
+            edges = new Array();
+            ptVertex = new Array();
+            edgeIdx = new Array();
+            var node;
+            var k = 0;
+            var bikeRoute = -1;
+            var weight = -1;
+            var type = -1;
+            var bikeRouteSnap = false;
+            var bikeRouteFree = false;
+
+            for (var i = 0; i < pointsArr.length; i++)
+            {
+                edgeIdx[i] = new Array(pointsArr.length);
+                //associate index with the point/node
+                node = pointsArr[i];
+                ptVertex[node] = i;
+                for (var j = 0; j < pointsArr.length; j++)
+                {
+                    bikeRouteSnap = false;
+                    bikeRouteFree = false;
+                    edgeIdx[i][j] = k;
+                    edges[k] = new Array(7);
+                    edges[k][0] = node;
+                    edges[k][1] = pointsArr[j];
+                    edges[k][6] = FREE;
+                    edges[k][2] = 0;
+                    weight = MAXWEIGHT;
+                    edges[k][3] = weight;
+                    edges[k][4] = 0;       // for distance
+                    edges[k][5] = 0;       // for distance and weight product
+                    k++
+                }
+            }
+
+            chunkNode = 0;
+            endProcess();
+            setTimeout("fillEdgeArrayFromRoutesInBB(true)", 0);
+        }
+
+        </script>
+
+        <style type="text/css">
+            #mapDiv
+            {
+                width: 10px;
+                height: 10px;
+            }
+            .style10
+            {
+                width: 10px;
+                height: 10px;
+            }
+        </style>
+    </head>
+    <body onload="load()" onunload="GUnload()" bgcolor="#f0f0f0">
+        Tested on Mozilla FireFox. Pending issues on IE and Google Chrome to be fixed. Email to report bugs. <br />
+
+        <form id="form1" action="" method="post">
+            <table border="1">
+                <td style="width: 300px;">
+                    <center>
+                        <b>Create/Delete Route</b>
+                    </center>
+                    <br />
+                    <div id="divDrawStyle">
+
+                        Draw Style:&nbsp;
+                        <input type="radio" name="rdDrawStyle" value="FREE" onclick="drawStyleChange(FREE)"
+                               id="rdDStyleFREE" title="Free Draw" />Free Draw
+                    </div>
+                    <div id="divCursorStyle">
+                        Cursor Style:&nbsp;
+                        <input type="radio" name="rdCursorStyle" value="NAVIGATE" onclick="cursorStyleChange(NAVIGATE)"
+                               id="rdCStyleNAVIGATE" title="Navigate" />Navigate
+                        <input type="radio" name="rdCursorStyle" value="DRAW" onclick="cursorStyleChange(DRAW)"
+                               id="rdCStyleDRAW" title="Draw" />Draw
+                        <br />
+                    </div>
+
+                    Weight:&nbsp;
+                    <select name="cmbWeight" id="cmbWeight">
+                        <option value="1" selected="selected">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                    </select>
+                    <br />
+
+                    <table>
+                        <tr>
+                            <td>
+                                Current Distances
+                            </td>
+                            <td>
+                                <input type="text" name="txtDistance" id="txtDistance" readonly="readonly" />
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <td>
+                                Current Weights:
+                            </td>
+                            <td>
+                                <input type="text" name="txtWeight" id="txtWeight" readonly="readonly" />
+                            </td>
+                        </tr>
+                        <tr>
+
+                            <td>
+                                Route Name:
+                            </td>
+                            <td>
+                                <input type="text" name="txtRouteName" id="txtRouteName" />
+                            </td>
+                        </tr>
+                    </table>
+                    <table>
+
+                        <tr>
+                            <td>
+                                <input type="button" id="btnAjaxStore" name="btnAjaxStore" value="Store" onclick="btnAjaxStoreClick()" />
+                            </td>
+                            <td>
+                                <input type="button" id="btnAjaxUndo" name="btnAjaxUndo" value="Undo" onclick="btnAjaxUndoClick()" />
+                            </td>
+                            <td>
+                                <input type="button" id="btnAjaxDelete" name="btnAjaxDelete" value="Delete Route"
+                                       onclick="btnAjaxDeleteRouteClick()" />
+
+                            </td>
+                        </tr>
+                    </table>
+                    <table>
+                        <tr>
+                            <td>
+                                Location:&nbsp;
+                            </td>
+
+                            <td>
+                                <input type="text" name="txtLoc" id="txtLoc" />
+                            </td>
+                            <td>
+                                <input type="button" id="btnAddLocation" name="btnAddLocation" value="Add Location"
+                                       onclick="btnAddLocClick(document.getElementById('txtLoc').value)" />
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+
+                                <input type="button" id="btnHideRoutes" name="btnHideRoutes" value="Hide Routes"
+                                       onclick="btnHideRoutesClick()" />
+                            </td>
+                            <td>
+                                <input type="button" id="btnHideBestPath" name="btnHideBestPath" value="Hide Best Path"
+                                       onclick="btnHideBestPathClick()" />
+                            </td>
+                        </tr>
+                    </table>
+                    <hr />
+                    <br />
+
+                    <br />
+                    <center>
+                        <b>Search</b></center>
+                    <br />
+                    <div id="txtAddressContainer">
+                        From (Eg. 500 Bloor St. West, Toronto, ON):
+                        <input type="text" name="txtFrom" value="500 Bloor St. West, Toronto, ON" id="txtFrom"
+                               size="50" />
+                        <br />
+                        To (Eg. 300 Dundas Street West, Toronto, ON):
+                        <input type="text" name="txtTo" value="300 Dundas Street West, Toronto, ON" id="txtTo"
+                               size="50" />
+
+                        <br />
+                        Area Coverage:&nbsp;
+                        <select name="cmbBB" id="cmbBB">
+                            <option value="1" selected="selected">1.00 x</option>
+                        </select>
+                        <br />
+                        Extended CoeffX:&nbsp;
+
+                        <select name="cmbExtAlgoCoeffX" id="cmbExtAlgoCoeffX">
+                            <option value="1" >0.6</option>
+                            <option value="2" selected="selected">0.5</option>
+                            <option value="3" >0.4</option>
+                            <option value="4" >0.3</option>
+                            <option value="5" >0.2</option>
+
+                            <option value="6" >0.1</option>
+                            <option value="7" >0.05</option>
+                        </select>
+                        Extended CoeffY:&nbsp;
+                        <select name="cmbExtAlgoCoeffY" id="cmbExtAlgoCoeffY">
+                            <option value="1" >0.6</option>
+                            <option value="2" >0.5</option>
+
+                            <option value="3" >0.4</option>
+                            <option value="4" >0.3</option>
+                            <option value="5" >0.2</option>
+                            <option value="6" >0.1</option>
+                            <option value="7" selected="selected">0.05</option>
+                        </select>
+
+                        <br />
+                        <input type="checkbox" id="chkPreInsertQ" name="chkPreInsertQ" value="Pre-Insert To Q"
+                               title="Pre-Insert To Q" checked />Pre-Insert To Q
+                        <br />
+                        <table>
+                            <tr>
+                                <td>
+                                    <input type="button" name="btnSearch" id="btnSearch" value="Search" onclick="btnSearchClick()" />
+                                </td>
+                                <td>
+
+                                    <input type="checkbox" id="chkShowSReg" name="chkShowSReg" value="Show Region Only"
+                                           title="Show Region Only" />Show Region Only
+                                </td>
+                            </tr>
+                        </table>
+                        <table>
+                            <tr bgcolor="lightgreen">
+                                <td>
+                                    <input type="checkbox" id="chkDirectedGraph" name="chkDirectedGraph" value="Directed Graph"
+                                           title="Directed Graph" />Directed Graph
+                                </td>
+                                <td>
+                                    <select name="cmbAlgo" id="cmbAlgorithm">
+                                        <option value="1" selected="selected">Dijkstra</option>
+                                        <option value="2">A* (Under Construction)</option>
+                                        <option value="3">NPASA (Under Construction)</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr bgcolor="lightgreen">
+                                <td>
+
+                                    Algorithm:&nbsp;
+                                </td>
+                                <td>
+                                    <select name="cmbAlgo" id="cmbAlgorithm">
+                                        <option value="1" selected="selected">Dijkstra</option>
+                                        <option value="2">A* (Under Construction)</option>
+                                        <option value="3">NPASA (Under Construction)</option>
+
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Progress:
+                                </td>
+                                <td>
+                                    <input type="text" name="txtProcess" id="txtProcess" size="26" readonly="readonly" />
+
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Num Nodes:
+                                </td>
+                                <td>
+                                    <input type="text" name="txtNumNodes" id="txtNumNodes" size="30" readonly="readonly" />
+                                </td>
+
+                            </tr>
+                            <tr>
+                                <td>
+                                    Best Path Distance:
+                                </td>
+                                <td>
+                                    <input type="text" name="txtBestDist" id="txtBestDist" size="30" readonly="readonly" />
+                                </td>
+                            </tr>
+
+                            <tr>
+                                <td>
+                                    Cost:
+                                </td>
+                                <td>
+                                    <input type="text" name="txtBestCost" id="txtBestCost" size="30" readonly="readonly" />
+                                </td>
+                            </tr>
+                            <tr>
+
+                                <td>
+                                    Algorithm Time:
+                                </td>
+                                <td>
+                                    <input type="text" name="txtDijkTime" id="txtDijkTime" size="30" readonly="readonly" />
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+
+                                    Total Search Time:
+                                </td>
+                                <td>
+                                    <input type="text" name="txtSearchTime" id="txtSearchTime" size="30" readonly="readonly" />
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Nodes Extracted:
+                                </td>
+
+                                <td>
+                                    <input type="text" name="txtNodesExtracted" id="txtNodesExtracted" size="30" readonly="readonly" />
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <br />
+
+                    <br />
+
+                    <div id="info_win" style="width: 360px;">
+                        <input type="hidden" id="hdnPoint" name="hdnPoint" />
+                        <input type="hidden" name="txtText" id="txtText" cols="55" rows="6" readonly="readonly" />
+                        <img src="legend2.JPG" width="337" height="80" alt="Legend" />
+                    </div>
+                </td>
+                <td class="style10">
+                    <div id="mapDiv">
+                    </div>
+
+                </td>
+                <td>
+                    <table>
+                        <div id="hiddenDIV">
+                        </div>
+                    </table>
+                </td>
+            </table>
+            <br />
+
+            <input type="hidden" id="nonce" name="nonce" value="" />
+        </form>
+        <font size="2" face="Arial"><b>References:</b>
+            <br />
+            <p>
+                [1] D. He, "BMA*: An Efficient Algorithm for the One-to-Some Shortest Path Problem," in Proceeding of the 3rd International Conference on Algorithmic Aspects in Information and Management, vol. 4508, pp. 346-357, 2007. [Online]. Available: SpringerLink, http://www.springerlink.com/content/f05k40201600u72h/. [Accessed Oct. 15, 2009].
+            </p>
+
+            <p>
+
+                [2] B. Stout, "Smart Move: Intelligent Path-Finding," Gamasutra - The Art & Business of Making Games, February 12, 1999. [Online]. Available: http://www.gamasutra.com/view/feature/3317/smart_move_intelligent_.php?print=1. [Accessed Oct 15, 2009].
+            </p>
+
+            <p>
+                [3] A. Bleiweiss, "GPU Accelerated Pathfinding," in GH '08: Proceedings of the 23rd ACM SIGGRAPH/EUROGRAPHICS Symposium on Graphics Hardware, pp. 65-74, 2008. [Online]. Available: ACM Digital Library, http://portal.acm.org/citation.cfm?id=1413957.1413968. [Accessed Oct 21, 2009].
+            </p>
+
+            <p>
+                [4] E. W. Dijkstra, "A Note on Two Problems in Connexion with Graphs,"  in Numerische Mathematik, vol. 1, pp. 269-271, 1959. [Online]. Available: SpringerLink, http://dx.doi.org/10.1007/BF01386390. [Accessed Oct. 15, 2009].
+            </p>
+
+            <p>
+                [5] P. E. Hart, N. J. Nilsson and B. Raphael, "A Formal Basis for the Heuristic Determination of Minimum Cost Paths," Systems Science and Cybernetics, IEEE Transactions, vol. 4, pp. 100-107, 1968. [Online]. Available: IEEExplore,  http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=4082128&isnumber=4082123. [Accessed Oct. 16, 2009].
+            </p>
+
+            <p>
+                [6] P.C. Netwon, E.G.D.P. Raj, L. Arockiam, R.H. Prasath, Kim Tai-hoon, "NPASA: A Noble Path Selection Algorithm," in Computer Science and its Applications, 2008. CSA '08. International Symposium , pp.52-55, 13-15 Oct. 2008. [Online]. Available:  IEEExplore, http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=4654060&isnumber=4654041. [Accessed October 21, 2009].
+            </p>
+
+            <p>
+                [7] S. Nazari, M.R. Meybodi, M.A. Salehigh, S. Taghipour, "An Advanced Algorithm for Finding Shortest Path in Car Navigation System," in Intelligent Networks and Intelligent Systems, 2008. ICINIS '08. First International Conference, pp.671-674, 1-3 Nov. 2008. [Online]. Available: IEEExplore, http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=4683315&isnumber=4683146. [Accessed October 21, 2009].
+            </p>
+
+            <p>
+                [8] M. Noto, H. Sato, "A Method for the Shortest Path Search by Extended Dijkstra Algorithm," in Systems, Man, and Cybernetics, 2000 IEEE International Conference, vol.3, pp.2316-2320, 2000. [Online].
+                Available: IEEExplore, http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=886462&isnumber=19155. [Accessed Oct 22 2009].
+            </p>
+
+            <p>
+                [9] S. Yussof, R.A. Razali, O. H. See, A.A. Ghapar, M.M. Din, "A Coarse-Grained Parallel Genetic Algorithm with Migration for Shortest Path Routing Problem" in High Performance Computing and Communications, 2009. HPCC '09. 11th IEEE International Conference , vol.00, issue 25-27, pp.615-621, June 2009. [Online]. Available: IEEExplore,
+                http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=5167053&isnumber=5166954. [Accessed Oct 22 2009].
+            </p>
+
+            <p>
+
+                [10] Y. Shoaib, N. Vasandani, A. Sinha, A. Goel, "MyBikeRoutes.com," January 2008. [Online]. Available: http://www.mybikeroutes.com. [Accessed Oct 21, 2009].
+            </p>
+
+            <p>
+                [11] Google Inc., "Google Maps API - Google Code, " Google code - code.google.com. 2007-2009. [Online]. Available: http://code.google.com/apis/maps. [Accessed Oct 21, 2009].
+            </p>
+
+            <p>
+                [12] R. Waldura. "Dijkstra's shortest path algorithm in Java," August 20, 2007. [Online]. Available: http://renaud.waldura.com/doc/java/dijkstra/. [Accessed October 21, 2009].
+            </p>
+
+            <p>
+
+                [13] M. Fu; J. Li; Z. Deng, "A Practical Route planning Algorithm for Vehicle Navigation System," in Intelligent Control and Automation, 2004. WCICA 2004. Fifth World Congress, vol.6, pp. 5326-5329 , 15-19 June 2004. [Online].
+                Available: IEEExplore, http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=1343742&isnumber=29577. [Accessed October 27, 2009].
+            </p>
+
+            <p>
+                [14] M. Barbehenn, "A Note on the Complexity of Dijkstra's Algorithm for Graphs with Weighted Vertices," in Computers, IEEE Transactions , vol.47, no.2, pp.263-, Feb 1998. [Online]. Available: IEEExplore,
+                http://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=663776&isnumber=14539. [Accessed November 4, 2009].
+            </p>
+
+            <p>
+                [15] Z. Zhang, N. R. Sturtevant, R. Holte, J. Schaeffer, A. Felner, "A* Search with Inconsistent Heuristics,", in Proceedings of the Twenty-first International Joint Conferences on Artificial Intelligence, 2009 ( IJCAI 2009), pp. 634-639, July 11-17 2009. [Online], Available: http://ijcai.org/papers09/Papers/IJCAI09-111.pdf. [Accessed November 4, 2009].
+            </p>
+
+            <br />
+            <br />
+            <br />
+            <center>
+                Latest Optimizations and Improvements: Yasir Shoaib</center>
+            <center>
+                Contributions: Yasir Shoaib, Nikhil Vasandani, Amit Sinha, (Supervisor: Dr. Ashvin Goel) </center>
+
+            <center>
+                Last Updated: December 17, 2009</center>
+            <center>
+                <a href="mailto:mybikeroutesadmin@gmail.com">Contact Us</a></center>
+            <br />
+        </font>
+        <font size="1" face="Arial">
+            <center>Disclaimer: The bike routes and resources on the site are provided as is for the benefit of the users. Users are advised to verify route information or other such data before use.</center>
+
+        </font>
+    </body>
+    <!--
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8;" />
+        <meta http-equiv="Pragma" content="no-cache">
+        <meta http-equiv="Expires" content="-1">
+        <meta http-equiv="Cache-control" content="no-cache">
+    </head>
+    !-->
+</html>

@@ -1,0 +1,56 @@
+a, span, div, body {
+	text-decoration: none;
+}
+
+body,html {
+	margin:0px;
+	width: 98%;
+	height: 100%;
+	font-family: verdana;
+	background: #eeeeee;
+}
+
+#mapDiv {
+	font: normal 10px verdana;
+}
+#mapDiv {
+	-moz-outline-width:8px;
+	-moz-outline-radius:15px;
+	-moz-outline-style:solid;
+	-moz-outline-color:#838FBB;
+	margin: 12px;
+
+}
+.statusBar {
+	-moz-outline-width:8px;
+	-moz-outline-radius:15px;
+	-moz-outline-style:solid;
+	-moz-outline-color:#838FBB;
+	margin: 12px;
+	margin-top: 10px;
+}
+
+#titleDiv {
+	font: bold 40px verdana;
+	padding: 5px;
+	text-align: center;
+	background:navy;
+	color: #FF9F09;
+	width: 500px;
+	-moz-outline-width:8px;
+	-moz-outline-radius:15px;
+	-moz-outline-style:solid;
+	-moz-outline-color:#838FBB;
+}
+
+#menutitle{
+	cursor:pointer;
+	margin-bottom: 5px;
+	background-color:#ECECFF;
+	color:#000000;
+	width:140px;
+	padding:2px;
+	text-align:center;
+	font-weight:bold;
+	border:2px solid #000000;
+}
